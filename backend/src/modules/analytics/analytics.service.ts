@@ -935,8 +935,17 @@ export class AnalyticsService {
     }
 
     // ── Scheduled spaces ───────────────────────────────────────────
-    const ssTpls: any[] = event.scheduledSpaceTemplates || [];
-    const placedSs = this.flatten(event.venueScheduledSpaces);
+    // Only sellable facilities belong in the report — a "Not for sale"
+    // Scheduled Space is a layout-only reference, same rule as Exhibitors
+    // above. Slots sold before a facility was flipped still count: their
+    // template is no longer in ssTpls, so they fall through to the "other"
+    // bucket by space name below.
+    const ssTpls: any[] = ((event.scheduledSpaceTemplates || []) as any[]).filter(
+      (t) => t?.forSale !== false,
+    );
+    const placedSs = this.flatten(event.venueScheduledSpaces).filter(
+      (p: any) => p?.forSale !== false,
+    );
     // Part-paid requests hold their slots and count what's been paid.
     const paidScheduled = scheduled.filter(
       (r) =>

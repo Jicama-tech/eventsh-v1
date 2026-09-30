@@ -6,6 +6,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { assertReferralIfRequired } from "../../common/referral-required.util";
+import {
+  eventHasEnded,
+  EVENT_ENDED_MESSAGE,
+} from "../../common/event-timing.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import * as QRCode from "qrcode";
@@ -72,7 +76,9 @@ export class ScheduledSpacesService {
 
   // A visitor registers and is immediately confirmed — no organizer approval
   // gate to pass before picking a space & slot. The organizer's role starts
-  // at payment confirmation instead (see confirmPayment below).
+  // at payment confirmation instead (see confirmPayment below) — unless
+  // every facility the visitor picks is set to "instant ticket", in which
+  // case selectSlots completes the booking by itself.
   //
   // A visitor may submit any number of requests for the same event over
   // its lifetime — mirrors stalls.service.ts's createStallRequest — but
@@ -85,6 +91,11 @@ export class ScheduledSpacesService {
     }
     const event = await this.eventModel.findById(dto.eventId);
     if (!event) throw new NotFoundException("Event not found");
+    // Past events accept no new bookings — same shared guard every other
+    // public booking flow uses (tickets, stalls, round tables, workshops).
+    if (eventHasEnded(event)) {
+      throw new BadRequestException(EVENT_ENDED_MESSAGE);
+    }
 
     const existingActive = await this.requestModel.findOne({
       eventId: new Types.ObjectId(String(dto.eventId)),
@@ -147,12 +158,45 @@ export class ScheduledSpacesService {
     return { success: true, data: requests[0] || null, requests };
   }
 
+  // A Scheduled Space marked "Not for sale" is a layout reference only (a
+  // practice court, a pool that isn't open for booking) and can never be
+  // booked — the same rule round-table-bookings.service.ts applies to
+  // reference tables. The flag is read from BOTH the placed instance and
+  // its source template: the organizer form snapshots template fields onto
+  // the instance at placement time, so either side saying "not for sale"
+  // wins (mirrors the eventfront's isBookableSpace rule for stalls).
+  // Unset (older data) = for sale.
+  private isForSale(event: any, space: any): boolean {
+    if (space?.forSale === false) return false;
+    const tpl = (event?.scheduledSpaceTemplates || []).find(
+      (t: any) => String(t?.id) === String(space?.templateId),
+    );
+    return tpl?.forSale !== false;
+  }
+
+  // Booking approval per facility (the Schedule tab's "Booking Approval"
+  // toggle). Approval is the default and the safe fallback: a booking is
+  // "instant" only when the placed instance AND its template (while it
+  // still exists) both say requiresApproval === false. Unset — every
+  // template from before the toggle — means approval required, i.e. the
+  // original flow where the organizer confirms before the ticket goes out.
+  private requiresApproval(event: any, space: any): boolean {
+    if (space?.requiresApproval !== false) return true;
+    const tpl = (event?.scheduledSpaceTemplates || []).find(
+      (t: any) => String(t?.id) === String(space?.templateId),
+    );
+    return !!tpl && tpl.requiresApproval !== false;
+  }
+
   // Placed instances with their template-defined slots, annotated with
   // which (positionId, slotId) tokens are already reserved. Mirrors
   // stalls.service.ts's getAvailableTables, but per-slot rather than
-  // per-whole-space. Every placed space is available to every visitor —
-  // referral codes only attribute a request to an operator (see register),
-  // they never filter.
+  // per-whole-space. Every placed FOR-SALE space is available to every
+  // visitor — referral codes only attribute a request to an operator (see
+  // register), they never filter. "Not for sale" facilities are left out
+  // entirely: they're layout references, and this list also feeds the
+  // registration form's "Type of Space Required" dropdown, which must not
+  // offer a facility type nobody can book.
   async getAvailableSpaces(eventId: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
@@ -163,13 +207,19 @@ export class ScheduledSpacesService {
     const bookedTokens = new Set<string>(event.scheduledSpaceBookedSlots || []);
 
     const spaces = (event.venueScheduledSpaces || [])
+      .filter((space: any) => this.isForSale(event, space))
       .map((space: any) => (space?.toObject ? space.toObject() : space))
       .map((s: any) => {
         const slots = (s.slots || []).map((slot: any) => ({
           ...slot,
           isBooked: bookedTokens.has(`${s.positionId}:${slot.id}`),
         }));
-        return { ...s, slots };
+        // Tells the visitor side up-front whether picking this facility
+        // yields the ticket immediately (Booking Approval = Instant Ticket)
+        // so the payment page can say so instead of "the organizer will
+        // confirm". Resolved here with the same row+template rule
+        // selectSlots enforces, so the two can't disagree.
+        return { ...s, slots, instantTicket: !this.requiresApproval(event, s) };
       });
 
     return {
@@ -203,10 +253,20 @@ export class ScheduledSpacesService {
 
     const event = await this.eventModel.findById(request.eventId);
     if (!event) throw new NotFoundException("Event not found");
+    // Checked again here (not just at register) because an "instant
+    // ticket" facility completes the booking in this very call — there's
+    // no organizer step left to catch a slot picked after the event ended.
+    if (eventHasEnded(event)) {
+      throw new BadRequestException(EVENT_ENDED_MESSAGE);
+    }
 
     // Resolve every selected slot against the event's ACTUAL placed
     // instances — price/name/date/time are never trusted from the client.
+    // One request can span several facilities: if ANY of them requires
+    // organizer approval the whole booking waits for it; only an all-
+    // "instant ticket" selection is ticketed on the spot (below).
     const resolved: any[] = [];
+    let needsApproval = false;
     for (const sel of dto.selectedSlots) {
       const space = (event.venueScheduledSpaces || []).find(
         (s: any) => s.positionId === sel.positionId,
@@ -216,6 +276,14 @@ export class ScheduledSpacesService {
           `Space ${sel.positionId} no longer exists on this event.`,
         );
       }
+      // Server-side guard, not just a hidden button: a "Not for sale"
+      // facility is never reservable, whatever the client sends.
+      if (!this.isForSale(event, space)) {
+        throw new BadRequestException(
+          `"${space.name}" is not available for booking.`,
+        );
+      }
+      if (this.requiresApproval(event, space)) needsApproval = true;
       const slot = (space.slots || []).find((s: any) => s.id === sel.slotId);
       if (!slot) {
         throw new BadRequestException(
@@ -283,13 +351,33 @@ export class ScheduledSpacesService {
     request.status = ScheduledSpaceStatusEnum.Processing;
     request.statusHistory.push({
       status: ScheduledSpaceStatusEnum.Processing,
-      note:
-        slotsTotal === 0
+      note: !needsApproval
+        ? "Slots selected — instant ticket, no organizer approval needed"
+        : slotsTotal === 0
           ? "Slots selected — free space, awaiting organizer approval"
           : "Slots selected, awaiting organizer payment confirmation",
       changedAt: new Date(),
     } as any);
     await request.save();
+
+    // "Instant ticket" facilities skip the organizer entirely: the booking
+    // completes right here — QR generated, request Completed/Paid, ticket
+    // emailed — and the response carries the QR so the visitor sees it on
+    // screen immediately. The organizer opted out of checking payment
+    // proof for these facilities, so the visitor's submission is taken as
+    // paid; the transaction id / screenshot still land on the request for
+    // the organizer's records (the screenshot upload that follows this
+    // call attaches to the Completed request just the same).
+    if (!needsApproval) {
+      await this.completeBooking(request, {
+        changedBy: "System",
+        historyNote:
+          slotsTotal === 0
+            ? "Booking confirmed automatically — free space, no approval required"
+            : "Booking confirmed automatically — instant ticket, no approval required",
+        instant: true,
+      });
+    }
 
     return { success: true, data: request };
   }
@@ -315,14 +403,20 @@ export class ScheduledSpacesService {
     return { success: true, data: request };
   }
 
-  // Shared terminal step for both a paid booking (organizer confirms
-  // payment) and a free one (slot selection completes it automatically):
-  // generates the check-in QR, marks the request Completed/Paid, and
-  // emails the ticket. `paidAmount` is taken from slotsTotal — for a free
-  // request that's 0, which is correct (nothing was owed).
+  // Shared terminal step, reached either when the organizer confirms a
+  // booking (confirmPayment) or straight from selectSlots for an "instant
+  // ticket" facility: generates the check-in QR, marks the request
+  // Completed/Paid, and emails the ticket. `paidAmount` is taken from
+  // slotsTotal — for a free request that's 0, which is correct (nothing
+  // was owed).
   private async completeBooking(
     request: ScheduledSpaceRequestDocument,
-    opts?: { notes?: string; changedBy?: string; historyNote?: string },
+    opts?: {
+      notes?: string;
+      changedBy?: string;
+      historyNote?: string;
+      instant?: boolean;
+    },
   ): Promise<void> {
     const qrPayload = {
       type: "eventsh-scheduled-space-checkin",
@@ -352,7 +446,9 @@ export class ScheduledSpacesService {
 
     // Best-effort — the ticket is still viewable from the event page even if
     // the email fails to send, so never let delivery break the confirmation.
-    this.emailTicket(request, qrCodeImage).catch((err) =>
+    this.emailTicket(request, qrCodeImage, {
+      instant: !!opts?.instant,
+    }).catch((err) =>
       this.logger.warn(
         `Ticket email failed for scheduled-space request ${request._id}: ${
           (err as any)?.message || err
@@ -362,7 +458,8 @@ export class ScheduledSpacesService {
   }
 
   // Emails the registrant their check-in QR ticket + booking summary once
-  // the organizer confirms payment (or resends it later). Uses the
+  // the organizer confirms payment, or the moment the slots are picked for
+  // an "instant ticket" facility (or resends it later). Uses the
   // organizer's custom SMTP sender when configured, same as every other
   // outbound email in the app. Attaches a rendered PDF copy of the ticket;
   // if headless Chromium fails (constrained prod hosts have hit this
@@ -371,7 +468,7 @@ export class ScheduledSpacesService {
   private async emailTicket(
     request: ScheduledSpaceRequestDocument,
     qrCodeImage: string,
-    opts?: { reissue?: boolean },
+    opts?: { reissue?: boolean; instant?: boolean },
   ) {
     const isReissue = !!opts?.reissue;
     const [event, organizer] = await Promise.all([
@@ -434,7 +531,11 @@ export class ScheduledSpacesService {
         heading(title),
         p(`Hi ${escapeEmailHtml(request.name)},`),
         p(
-          `Your payment for ${strong(event?.title || "the event")} has been confirmed. ` +
+          // An instant booking was never "confirmed" by anyone — it's
+          // simply booked — so don't claim the organizer checked payment.
+          (opts?.instant
+            ? `Your booking for ${strong(event?.title || "the event")} is confirmed. `
+            : `Your payment for ${strong(event?.title || "the event")} has been confirmed. `) +
             `Here is your check-in QR ticket — please show this at the venue. A PDF copy is attached.`,
         ),
         request.whatsappNumber
@@ -485,7 +586,7 @@ export class ScheduledSpacesService {
       const caption =
         `🎟️ *${isReissue ? "Your ticket, resent" : "Booking confirmed"} — ${event?.title || "Event"}*\n\n` +
         `Hi ${request.name},\n\n` +
-        `Your payment for *${event?.title || "the event"}* has been confirmed. ` +
+        `${opts?.instant ? "Your booking" : "Your payment"} for *${event?.title || "the event"}* ${opts?.instant ? "is" : "has been"} confirmed. ` +
         (pdfBuffer
           ? `Your check-in QR ticket is attached — please show it at the venue.`
           : `Your check-in QR ticket has been emailed to ${request.email}.`);
