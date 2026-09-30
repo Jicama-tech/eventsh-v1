@@ -387,10 +387,12 @@ interface ScheduleSlot {
 
 // A Scheduled Space is a bookable FACILITY (tennis court, cricket ground,
 // chess court, ...) sold per time slot — not a sellable/rentable "space" in
-// the Stalls sense, so there's no forSale toggle and no booking/deposit
-// pricing tiers, just one per-slot price. Unified across both shapes: the
-// organizer picks a facilityType + shape from ONE form, not two parallel
-// rect/round sections.
+// the Stalls sense, so there are no booking/deposit pricing tiers, just one
+// per-slot price. It does share the Spaces / Round Tables "For Sale / Not
+// for Sale" toggle: a not-for-sale facility is a layout reference only (a
+// practice court, a pool that isn't open for booking) and can't be booked.
+// Unified across both shapes: the organizer picks a facilityType + shape
+// from ONE form, not two parallel rect/round sections.
 const SCHEDULED_SPACE_FACILITY_TYPES = [
   "Tennis Court",
   "Cricket Ground",
@@ -416,6 +418,12 @@ interface ScheduledSpaceTemplate {
   price: number;
   color?: string;
   slots: ScheduleSlot[];
+  // Unset (older data) = for sale.
+  forSale?: boolean;
+  // Booking approval: unset/true = the organizer confirms each booking
+  // before the QR ticket is issued; false = "instant ticket" — the booking
+  // completes the moment the visitor picks slots (and pays, if priced).
+  requiresApproval?: boolean;
   // Legacy: operator this space was once assigned to. No longer set from
   // the form or used for filtering — kept so previously saved events load.
   operatorId?: string;
@@ -3414,9 +3422,13 @@ const TableManagement = ({
 
 // Scheduled Space templates — bookable FACILITIES (tennis courts, cricket
 // grounds, chess tables, ...), unified across both shapes in one form (a
-// Shape field, not two parallel rect/round sections). No forSale toggle and
-// no booking/deposit price tiers — those are Stalls vendor-space concepts
-// that don't apply here; a facility is always bookable, one price per slot.
+// Shape field, not two parallel rect/round sections). No booking/deposit
+// price tiers — those are Stalls vendor-space concepts that don't apply
+// here; one price per slot. It does share the Spaces / Round Tables
+// "For Sale / Not for Sale" toggle: a not-for-sale facility stays on the
+// venue layout as a reference (a practice court, a closed pool) and can't
+// be booked. Its price and time slots are kept in state and saved, just
+// hidden in the form, so flipping back to For Sale restores them intact.
 const ScheduledSpaceManagement = ({
   templates,
   setTemplates,
@@ -3436,6 +3448,8 @@ const ScheduledSpaceManagement = ({
     price: string;
     color: string;
     slots: ScheduleSlot[];
+    forSale: boolean;
+    requiresApproval: boolean;
   };
   setCurrent: React.Dispatch<React.SetStateAction<typeof current>>;
 }) => {
@@ -3467,6 +3481,8 @@ const ScheduledSpaceManagement = ({
       price: "",
       color: "#3b82f6",
       slots: [],
+      forSale: true,
+      requiresApproval: true,
     });
     setEditingId(null);
   };
@@ -3648,6 +3664,8 @@ const ScheduledSpaceManagement = ({
       price: parseFloat(current.price) || 0,
       color: current.color || "#3b82f6",
       slots: current.slots,
+      forSale: current.forSale,
+      requiresApproval: current.requiresApproval,
     };
     if (editingId) {
       setTemplates(templates.map((t) => (t.id === editingId ? data : t)));
@@ -3677,6 +3695,8 @@ const ScheduledSpaceManagement = ({
       price: t.price != null ? String(t.price) : "",
       color: t.color || "#3b82f6",
       slots: t.slots || [],
+      forSale: t.forSale !== false,
+      requiresApproval: t.requiresApproval !== false,
     });
     setEditingId(id);
   };
@@ -3799,18 +3819,104 @@ const ScheduledSpaceManagement = ({
                 </Button>
               </div>
             </div>
+            {/* For Sale / Not for Sale toggle (mirrors Spaces / Round
+                Tables). A not-for-sale facility still sits on the venue
+                layout as a reference but visitors can't book it. */}
             <div>
-              <Label>{t("Price per Slot *")}</Label>
-              <Input
-                type="number"
-                min={0}
-                value={current.price}
-                onChange={(e) =>
-                  setCurrent((p) => ({ ...p, price: e.target.value }))
-                }
-              />
+              <Label className="mb-2 block">{t("Space Type")}</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${current.forSale ? "border-green-500 bg-green-50 text-green-700" : "border-border text-muted-foreground hover:bg-muted"}`}
+                  onClick={() =>
+                    setCurrent((p) => ({ ...p, forSale: true }))
+                  }
+                >
+                  For Sale
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${!current.forSale ? "border-orange-500 bg-orange-50 text-orange-700" : "border-border text-muted-foreground hover:bg-muted"}`}
+                  onClick={() =>
+                    setCurrent((p) => ({ ...p, forSale: false }))
+                  }
+                >
+                  Not for Sale
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {current.forSale
+                  ? "Visitors can book this facility by time slot"
+                  : "Reference only (a practice court, a closed pool, etc.)"}
+              </p>
             </div>
           </div>
+          {!current.forSale && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
+              This facility is <strong>not for sale</strong> — it appears on
+              the venue layout as a reference (e.g. a practice court or a pool
+              that isn't open for booking) but cannot be booked. Its price and
+              time slots are kept and come back if you switch it to For Sale.
+            </div>
+          )}
+          {current.forSale && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>{t("Price per Slot *")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={current.price}
+                  onChange={(e) =>
+                    setCurrent((p) => ({ ...p, price: e.target.value }))
+                  }
+                />
+              </div>
+              {/* Booking approval — "Approval Required" keeps the original
+                  flow (the organizer confirms every booking before the QR
+                  ticket is issued); "Instant Ticket" issues it the moment
+                  the visitor picks their slots (and submits payment for a
+                  priced space), emailed and shown on screen at once. */}
+              <div>
+                <Label className="mb-2 block">{t("Booking Approval")}</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${current.requiresApproval ? "border-amber-500 bg-amber-50 text-amber-700" : "border-border text-muted-foreground hover:bg-muted"}`}
+                    onClick={() =>
+                      setCurrent((p) => ({ ...p, requiresApproval: true }))
+                    }
+                  >
+                    Approval Required
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${!current.requiresApproval ? "border-green-500 bg-green-50 text-green-700" : "border-border text-muted-foreground hover:bg-muted"}`}
+                    onClick={() =>
+                      setCurrent((p) => ({ ...p, requiresApproval: false }))
+                    }
+                  >
+                    Instant Ticket
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {current.requiresApproval
+                    ? "You confirm each booking before the QR ticket is issued"
+                    : "QR ticket goes out the moment a slot is booked — no approval step"}
+                </p>
+              </div>
+            </div>
+          )}
+          {current.forSale && !current.requiresApproval && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+              <strong>Instant ticket</strong> — as soon as a visitor picks a
+              slot (and submits payment, if this space is priced) the booking
+              is confirmed automatically: the check-in QR ticket is emailed to
+              them and shown on screen. You won't review payment proof first,
+              so use this for free facilities or where you're happy to check
+              payments afterwards from the request list.
+            </div>
+          )}
           {current.shape === "Rectangle" ? (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -3875,195 +3981,199 @@ const ScheduledSpaceManagement = ({
             </div>
           </div>
 
-          {/* Time Slots */}
-          <div className="border rounded-lg p-3 bg-background space-y-3">
-            <Label className="text-sm font-medium">{t("Time Slots")}</Label>
+          {/* Time Slots — only a for-sale facility has anything to
+              book. A not-for-sale one keeps its slots (hidden here)
+              so flipping it back to For Sale restores them intact. */}
+          {current.forSale && (
+            <div className="border rounded-lg p-3 bg-background space-y-3">
+              <Label className="text-sm font-medium">{t("Time Slots")}</Label>
 
-            {/* Slot AI — pick a start/end window and a count, get that many
-                equal-duration slots back-to-back (or spaced by an optional
-                gap) instead of adding each one by hand. Generated slots are
-                ordinary entries in the list below — remove or re-add
-                individual ones same as always. */}
-            <div className="border rounded-lg p-3 bg-indigo-50/60 border-indigo-200 space-y-2">
-              <Label className="text-sm font-medium flex items-center gap-1.5 text-indigo-800">
-                <Sparkles size={14} />
-                Slot AI
-              </Label>
-              <p className="text-xs text-indigo-700/80">
-                Set a date, start/end time and how many slots you need —
-                equal-duration slots fill the window automatically. Adjust or
-                remove any of them afterward like usual.
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {/* Slot AI — pick a start/end window and a count, get that many
+                  equal-duration slots back-to-back (or spaced by an optional
+                  gap) instead of adding each one by hand. Generated slots are
+                  ordinary entries in the list below — remove or re-add
+                  individual ones same as always. */}
+              <div className="border rounded-lg p-3 bg-indigo-50/60 border-indigo-200 space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-1.5 text-indigo-800">
+                  <Sparkles size={14} />
+                  Slot AI
+                </Label>
+                <p className="text-xs text-indigo-700/80">
+                  Set a date, start/end time and how many slots you need —
+                  equal-duration slots fill the window automatically. Adjust or
+                  remove any of them afterward like usual.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  <Input
+                    type="date"
+                    value={slotAI.date}
+                    onChange={(e) =>
+                      setSlotAI((p) => ({ ...p, date: e.target.value }))
+                    }
+                  />
+                  <Input
+                    type="time"
+                    value={slotAI.startTime}
+                    onChange={(e) =>
+                      setSlotAI((p) => ({ ...p, startTime: e.target.value }))
+                    }
+                  />
+                  <Input
+                    type="time"
+                    value={slotAI.endTime}
+                    onChange={(e) =>
+                      setSlotAI((p) => ({ ...p, endTime: e.target.value }))
+                    }
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder={t("No. of slots")}
+                    value={slotAI.count}
+                    onChange={(e) =>
+                      setSlotAI((p) => ({ ...p, count: e.target.value }))
+                    }
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder={t("Gap (min)")}
+                    value={slotAI.gapMinutes}
+                    onChange={(e) =>
+                      setSlotAI((p) => ({ ...p, gapMinutes: e.target.value }))
+                    }
+                  />
+                </div>
                 <Input
-                  type="date"
-                  value={slotAI.date}
+                  placeholder={
+                    'Label prefix (optional — e.g. "Session" → Session 1, Session 2…)'
+                  }
+                  value={slotAI.labelPrefix}
                   onChange={(e) =>
-                    setSlotAI((p) => ({ ...p, date: e.target.value }))
+                    setSlotAI((p) => ({ ...p, labelPrefix: e.target.value }))
                   }
                 />
-                <Input
-                  type="time"
-                  value={slotAI.startTime}
-                  onChange={(e) =>
-                    setSlotAI((p) => ({ ...p, startTime: e.target.value }))
-                  }
-                />
-                <Input
-                  type="time"
-                  value={slotAI.endTime}
-                  onChange={(e) =>
-                    setSlotAI((p) => ({ ...p, endTime: e.target.value }))
-                  }
-                />
-                <Input
-                  type="number"
-                  min={1}
-                  placeholder={t("No. of slots")}
-                  value={slotAI.count}
-                  onChange={(e) =>
-                    setSlotAI((p) => ({ ...p, count: e.target.value }))
-                  }
-                />
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder={t("Gap (min)")}
-                  value={slotAI.gapMinutes}
-                  onChange={(e) =>
-                    setSlotAI((p) => ({ ...p, gapMinutes: e.target.value }))
-                  }
-                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                  onClick={generateSlotsWithAI}
+                >
+                  <Sparkles size={14} className="mr-1" />
+                  Generate Slots
+                </Button>
               </div>
-              <Input
-                placeholder={
-                  'Label prefix (optional — e.g. "Session" → Session 1, Session 2…)'
-                }
-                value={slotAI.labelPrefix}
-                onChange={(e) =>
-                  setSlotAI((p) => ({ ...p, labelPrefix: e.target.value }))
-                }
-              />
-              <Button
-                type="button"
-                size="sm"
-                className="bg-indigo-600 hover:bg-indigo-700"
-                onClick={generateSlotsWithAI}
-              >
-                <Sparkles size={14} className="mr-1" />
-                Generate Slots
-              </Button>
+
+              {current.slots.length > 0 && (
+                <div className="space-y-1">
+                  {current.slots.map((s) =>
+                    editingSlotId === s.id ? (
+                      <div
+                        key={s.id}
+                        className="bg-muted rounded p-2 space-y-2 ring-1 ring-primary"
+                      >
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <Input
+                            type="date"
+                            className="h-8 text-xs"
+                            value={editingSlotDraft.date}
+                            onChange={(e) =>
+                              setEditingSlotDraft((p) => ({
+                                ...p,
+                                date: e.target.value,
+                              }))
+                            }
+                          />
+                          <Input
+                            type="time"
+                            className="h-8 text-xs"
+                            value={editingSlotDraft.startTime}
+                            onChange={(e) =>
+                              setEditingSlotDraft((p) => ({
+                                ...p,
+                                startTime: e.target.value,
+                              }))
+                            }
+                          />
+                          <Input
+                            type="time"
+                            className="h-8 text-xs"
+                            value={editingSlotDraft.endTime}
+                            onChange={(e) =>
+                              setEditingSlotDraft((p) => ({
+                                ...p,
+                                endTime: e.target.value,
+                              }))
+                            }
+                          />
+                          <Input
+                            placeholder={t("Label (optional)")}
+                            className="h-8 text-xs"
+                            value={editingSlotDraft.label}
+                            onChange={(e) =>
+                              setEditingSlotDraft((p) => ({
+                                ...p,
+                                label: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7"
+                            onClick={cancelEditSlot}
+                          >
+                            <X size={12} className="mr-1" /> Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7"
+                            onClick={saveEditSlot}
+                          >
+                            <Check size={12} className="mr-1" /> Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between text-sm bg-muted rounded px-2 py-1.5"
+                      >
+                        <span>
+                          {s.date} • {s.startTime}–{s.endTime}
+                          {s.label ? ` • ${s.label}` : ""}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => startEditSlot(s)}
+                          >
+                            <Pencil size={12} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => removeSlot(s.id)}
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
             </div>
-
-            {current.slots.length > 0 && (
-              <div className="space-y-1">
-                {current.slots.map((s) =>
-                  editingSlotId === s.id ? (
-                    <div
-                      key={s.id}
-                      className="bg-muted rounded p-2 space-y-2 ring-1 ring-primary"
-                    >
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        <Input
-                          type="date"
-                          className="h-8 text-xs"
-                          value={editingSlotDraft.date}
-                          onChange={(e) =>
-                            setEditingSlotDraft((p) => ({
-                              ...p,
-                              date: e.target.value,
-                            }))
-                          }
-                        />
-                        <Input
-                          type="time"
-                          className="h-8 text-xs"
-                          value={editingSlotDraft.startTime}
-                          onChange={(e) =>
-                            setEditingSlotDraft((p) => ({
-                              ...p,
-                              startTime: e.target.value,
-                            }))
-                          }
-                        />
-                        <Input
-                          type="time"
-                          className="h-8 text-xs"
-                          value={editingSlotDraft.endTime}
-                          onChange={(e) =>
-                            setEditingSlotDraft((p) => ({
-                              ...p,
-                              endTime: e.target.value,
-                            }))
-                          }
-                        />
-                        <Input
-                          placeholder={t("Label (optional)")}
-                          className="h-8 text-xs"
-                          value={editingSlotDraft.label}
-                          onChange={(e) =>
-                            setEditingSlotDraft((p) => ({
-                              ...p,
-                              label: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7"
-                          onClick={cancelEditSlot}
-                        >
-                          <X size={12} className="mr-1" /> Cancel
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7"
-                          onClick={saveEditSlot}
-                        >
-                          <Check size={12} className="mr-1" /> Save
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between text-sm bg-muted rounded px-2 py-1.5"
-                    >
-                      <span>
-                        {s.date} • {s.startTime}–{s.endTime}
-                        {s.label ? ` • ${s.label}` : ""}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => startEditSlot(s)}
-                        >
-                          <Pencil size={12} />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => removeSlot(s.id)}
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                    </div>
-                  ),
-                )}
-              </div>
-            )}
-          </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={saveTemplate} className="flex-1">
@@ -4106,6 +4216,22 @@ const ScheduledSpaceManagement = ({
                         style={{ backgroundColor: t.color || "#3b82f6" }}
                       />
                       {t.name}
+                      {t.forSale === false && (
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-50"
+                        >
+                          Not for Sale
+                        </Badge>
+                      )}
+                      {t.forSale !== false && t.requiresApproval === false && (
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 border-green-300 text-green-700 bg-green-50"
+                        >
+                          Instant Ticket
+                        </Badge>
+                      )}
                       <Badge variant="outline" className="text-[9px] px-1.5 py-0">
                         {t.facilityType}
                       </Badge>
@@ -4119,9 +4245,15 @@ const ScheduledSpaceManagement = ({
                         : `⌀${t.diameter}`}{" "}
                       • {t.slots.length} slot(s)
                     </div>
-                    <div className="text-sm text-muted-foreground font-medium">
-                      {formatPrice(t.price)} / slot
-                    </div>
+                    {t.forSale === false ? (
+                      <div className="text-sm text-orange-600 font-medium">
+                        Reference only — not bookable
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground font-medium">
+                        {formatPrice(t.price)} / slot
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
@@ -6808,9 +6940,15 @@ const VenueDesigner = ({
                     <p className="text-[10px] text-muted-foreground truncate">
                       {template.facilityType}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {(template.slots || []).length} slot(s)
-                    </p>
+                    {template.forSale === false ? (
+                      <p className="text-[10px] font-semibold text-orange-600">
+                        Not for sale
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">
+                        {(template.slots || []).length} slot(s)
+                      </p>
+                    )}
                   </div>
                 ))}
 
@@ -8074,6 +8212,9 @@ const VenueDesigner = ({
                 {currentScheduledSpaces.map((space) => {
                   const isSelected = selectedTable === `ss-${space.positionId}`;
                   const isCircle = space.shape === "Circle";
+                  // Reference-only facility — hatched like a not-for-sale
+                  // Space so it reads as "on the map, not bookable".
+                  const notForSale = space.forSale === false;
                   const geom = liveScheduledSpaceGeom(space);
                   const w = geom.w;
                   const h = geom.h;
@@ -8095,6 +8236,11 @@ const VenueDesigner = ({
                         border: isSelected
                           ? "3px solid #1d4ed8"
                           : `2px solid ${space.color ? space.color + "88" : "#374151"}`,
+                        ...(notForSale &&
+                          !isSelected && {
+                            backgroundImage:
+                              "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)",
+                          }),
                         cursor: isDragging ? "grabbing" : "grab",
                         display: "flex",
                         alignItems: "center",
@@ -8133,7 +8279,9 @@ const VenueDesigner = ({
                           {space.facilityType}
                         </div>
                         <div className="text-[7px] opacity-90">
-                          {(space.slots || []).length} slot(s)
+                          {notForSale
+                            ? "Not for sale"
+                            : `${(space.slots || []).length} slot(s)`}
                         </div>
                       </div>
                       {/* Resize handle(s) — Circle facilities get a single SE
@@ -9384,6 +9532,8 @@ export function CreateEventForm({
     price: "",
     color: "#3b82f6",
     slots: [] as ScheduleSlot[],
+    forSale: true,
+    requiresApproval: true,
   });
 
   // Replace your currentAddOn state with this:
@@ -16399,7 +16549,41 @@ export function CreateEventForm({
               <BlurOverlay visible={!blurActive}>
                 <ScheduledSpaceManagement
                   templates={scheduledSpaceTemplates}
-                  setTemplates={setScheduledSpaceTemplates}
+                  setTemplates={(next) => {
+                    setScheduledSpaceTemplates(next);
+                    // Placed instances snapshot the template at placement
+                    // time, so keep their For Sale / Booking Approval flags
+                    // in step when a template is toggled later — otherwise
+                    // a court flipped to "Not for sale" would stay bookable
+                    // on the layout until re-placed (the gap Spaces has; see
+                    // eventFront's isBookableSpace). Untouched rows keep
+                    // their identity.
+                    const byTemplate = new Map(
+                      next.map((tpl) => [tpl.id, tpl]),
+                    );
+                    setVenueScheduledSpaces((prev) => {
+                      let changed = false;
+                      const synced: Record<string, PositionedScheduledSpace[]> =
+                        {};
+                      for (const [cfgId, rows] of Object.entries(prev || {})) {
+                        synced[cfgId] = (rows || []).map((row) => {
+                          const tpl = byTemplate.get(row.templateId);
+                          if (!tpl) return row;
+                          const forSale = tpl.forSale !== false;
+                          const requiresApproval = tpl.requiresApproval !== false;
+                          if (
+                            (row.forSale !== false) === forSale &&
+                            (row.requiresApproval !== false) === requiresApproval
+                          ) {
+                            return row;
+                          }
+                          changed = true;
+                          return { ...row, forSale, requiresApproval };
+                        });
+                      }
+                      return changed ? synced : prev;
+                    });
+                  }}
                   current={currentScheduledSpace}
                   setCurrent={setCurrentScheduledSpace}
                 />

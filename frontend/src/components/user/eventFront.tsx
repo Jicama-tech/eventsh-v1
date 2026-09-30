@@ -679,6 +679,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // to the tabs block so we can scroll it into view on card click.
   const [activeTab, setActiveTab] = useState("organizer");
   const tabsSectionRef = useRef<HTMLDivElement>(null);
+  // "Reserve Your Seats" block inside the Venue tab — the "Book a Seat /
+  // Table" card and the chatbot pill scroll straight to it.
+  const roundTableSectionRef = useRef<HTMLDivElement>(null);
   // Live fit-to-screen scale for the maximized venue dialog. Recomputed
   // by a ResizeObserver on the scrollable container so the entire
   // layout fits the dialog viewport instead of forcing the user to
@@ -979,6 +982,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       .filter(Boolean);
     return Array.from(new Set(types)) as string[];
   }, [scheduledSpacesAvailable]);
+  // "Not for sale" Scheduled Spaces are layout-only references (a practice
+  // court, a pool that isn't open for booking) — nothing to book, same as
+  // a not-for-sale Space. Read from BOTH the placed row and its template
+  // (matched by templateId): the organizer form snapshots the flag onto
+  // the row at placement time, so either side saying "not for sale" wins —
+  // the same rule isBookableSpace applies to stalls further down.
+  const notForSaleScheduledTemplateIds = useMemo(
+    () =>
+      new Set<string>(
+        ((eventData as any)?.scheduledSpaceTemplates || [])
+          .filter((t: any) => t?.forSale === false && t?.id != null)
+          .map((t: any) => String(t.id)),
+      ),
+    [eventData],
+  );
+  const isScheduledSpaceForSale = (s: any) =>
+    s?.forSale !== false &&
+    !notForSaleScheduledTemplateIds.has(String(s?.templateId));
   // Same set, but sourced synchronously from the raw event doc rather than
   // the availability fetch — scheduledSpacesAvailable starts out empty
   // ([]) until fetchAvailableScheduledSpaces() resolves, so it can't be
@@ -988,11 +1009,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // as bookable — the gated dropdown/picker still key off the fetch above.
   const allScheduledSpaceFacilityTypes = useMemo(() => {
     const types = ((eventData as any)?.venueScheduledSpaces || [])
-      .filter((s: any) => (s.slots || []).length > 0)
+      .filter(
+        (s: any) =>
+          s?.forSale !== false &&
+          !notForSaleScheduledTemplateIds.has(String(s?.templateId)) &&
+          (s.slots || []).length > 0,
+      )
       .map((s: any) => s.facilityType)
       .filter(Boolean);
     return Array.from(new Set(types)) as string[];
-  }, [eventData]);
+  }, [eventData, notForSaleScheduledTemplateIds]);
   // Per-facility-type slot counts (from the same availability fetch the slot
   // picker uses) so the "Type of Space Required" dropdown can tell the
   // registrant up-front whether a type still has open slots, instead of them
@@ -2240,7 +2266,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         `${apiURL}/scheduled-spaces/available/${(eventData as any)?._id}`,
       );
       const result = await res.json();
-      setScheduledSpacesAvailable(result?.data?.spaces || []);
+      // The backend already leaves "Not for sale" facilities out of this
+      // list; filter again so an older server can't surface one as bookable.
+      setScheduledSpacesAvailable(
+        (result?.data?.spaces || []).filter(
+          (s: any) => s?.forSale !== false,
+        ),
+      );
     } catch {
       setScheduledSpacesAvailable([]);
     }
@@ -2266,6 +2298,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           startTime: slot.startTime,
           endTime: slot.endTime,
           price: space.price || 0,
+          // From the availability fetch — true when this facility issues
+          // the ticket on the spot (no organizer approval step).
+          instantTicket: space.instantTicket === true,
         },
       ];
     });
@@ -2289,7 +2324,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // pay, so the payment page (QR/transaction proof) doesn't apply. Submit
     // the slot selection directly instead, same as the paid path minus the
     // proof-of-payment fields — the organizer still approves it manually
-    // before the ticket is issued.
+    // before the ticket is issued, unless every picked facility is set to
+    // "instant ticket", in which case the response already carries the
+    // finished (Completed) booking with its QR.
     if (total === 0) {
       setScheduledSpaceSlotsSubmitting(true);
       try {
@@ -2318,12 +2355,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         setSelectedScheduledSlots([]);
         setShowScheduledSpacePicker(false);
         setShowScheduledSpaceStatus(true);
-        toast({
-          duration: 5000,
-          title: "Booking submitted",
-          description:
-            "This space is free — no payment needed. The organizer will confirm your slot shortly.",
-        });
+        // An "instant ticket" facility comes back already Completed — the
+        // status dialog that just opened shows the QR, and the same ticket
+        // is on its way by email.
+        if (result?.data?.status === "Completed") {
+          toast({
+            duration: 6000,
+            title: "Booking confirmed",
+            description:
+              "Your check-in QR ticket is ready on screen and has been emailed to you.",
+          });
+        } else {
+          toast({
+            duration: 5000,
+            title: "Booking submitted",
+            description:
+              "This space is free — no payment needed. The organizer will confirm your slot shortly.",
+          });
+        }
       } catch (err: any) {
         toast({
           duration: 5000,
@@ -2352,6 +2401,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         },
         selectedSlots: selectedScheduledSlots,
         total,
+        // Every picked facility is "instant ticket" → the payment page can
+        // promise the QR right after submit. Mixed/approval selections keep
+        // the "organizer will confirm" copy (the server applies the same
+        // any-requires-approval rule when it decides whether to complete).
+        instant:
+          selectedScheduledSlots.length > 0 &&
+          selectedScheduledSlots.every((s) => s.instantTicket === true),
       },
     });
   };
@@ -6347,6 +6403,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const openRoundTableBooking = () => {
     if (!guardEventOpen("Round-table bookings")) return;
     goToTab("venue", true);
+    // The tab content mounts lazily; once it has, land on the seat picker
+    // (map + table category cards) rather than the top of the tab.
+    setTimeout(() => {
+      roundTableSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 250);
   };
 
   // ── "Add to Google Calendar" + "View on Google Maps" links for the
@@ -6554,12 +6618,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // nothing but seats doesn't also need the general Venue Layout tab — it
   // would just be a redundant, seat-only copy of that section.
   const eventFeatures = (eventData as any)?.features || {};
+  // Placed items count too, not just the section switches: an event whose
+  // organizer placed round tables (or spaces / scheduled spaces) without
+  // ever flipping the matching Event Sections toggle — common on older
+  // events — must still get the tab, or there is no way to reach the map
+  // and book a seat.
+  const hasPlacedRoundTables =
+    roundTableData.length > 0 ||
+    (Array.isArray((eventData as any)?.venueRoundTables) &&
+      (eventData as any).venueRoundTables.length > 0);
   const hasVenueLayout =
     !!eventFeatures.hasStalls ||
     !!eventFeatures.hasRoundTables ||
     !!eventFeatures.hasSpeakers ||
     !!eventFeatures.hasWorkshops ||
     !!eventFeatures.hasScheduledSpaces ||
+    hasPlacedRoundTables ||
+    (venueTables && Object.keys(venueTables).length > 0) ||
+    currentLayoutScheduledSpaces.length > 0 ||
     currentLayoutDoors.length > 0;
 
   // Reusable door renderer — mirrors the designer so the storefront,
@@ -6656,6 +6732,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       const isCircle = space.shape === "Circle";
       const w = (isCircle ? space.diameter : space.width) || 100;
       const h = (isCircle ? space.diameter : space.height) || 100;
+      // Reference-only facility — stays on the map (hatched, like a
+      // not-for-sale Space) but is never offered for booking.
+      const notForSale = !isScheduledSpaceForSale(space);
       return (
         <div
           key={`vss-${space.positionId}`}
@@ -6668,12 +6747,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             borderRadius: isCircle ? "50%" : "6px",
             backgroundColor: space.color || "#3b82f6",
             border: `2px solid ${space.color ? space.color + "88" : "#1d4ed8"}`,
+            ...(notForSale
+              ? {
+                  backgroundImage:
+                    "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)",
+                }
+              : {}),
             transform: space.rotation
               ? `rotate(${space.rotation}deg)`
               : undefined,
             zIndex: 5,
           }}
-          title={`${space.name} — ${space.facilityType}`}
+          title={`${space.name} — ${space.facilityType}${notForSale ? " (not for sale)" : ""}`}
         >
           <FacilityCourtMarkings
             facilityType={space.facilityType}
@@ -6685,6 +6770,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             <div className="text-[7px] opacity-90 truncate">
               {space.facilityType}
             </div>
+            {notForSale && (
+              <div className="text-[7px] font-semibold opacity-90 truncate">
+                Not for sale
+              </div>
+            )}
           </div>
         </div>
       );
@@ -9547,9 +9637,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               )}
 
               {/* ── Scheduled Spaces — only if the organizer has placed at
-                  least one facility with a defined slot ── */}
+                  least one FOR-SALE facility with a defined slot. Facilities
+                  marked "Not for sale" are layout references and don't
+                  count — an event with nothing but those has no slot to
+                  book, so no "Book a slot" invitation either. ── */}
               {((eventData as any)?.venueScheduledSpaces || []).some(
-                (s: any) => (s.slots || []).length > 0,
+                (s: any) =>
+                  isScheduledSpaceForSale(s) && (s.slots || []).length > 0,
               ) && (
                 <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                   <p className="text-gray-700 font-semibold text-sm mb-1">
@@ -9572,6 +9666,41 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     }}
                   >
                     Book a slot
+                  </button>
+                </div>
+              )}
+
+              {/* ── Round tables — same entry card as Scheduled Spaces. Shown
+                  when at least one placed round table is for sale ("not for
+                  sale" tables are layout references). Opens the Venue tab
+                  with the map expanded and lands on the seat picker; the
+                  booking itself then follows the usual approval flow
+                  (booking → payment page → organizer confirms → ticket). ── */}
+              {(roundTableData.length > 0
+                ? roundTableData
+                : ((eventData as any)?.venueRoundTables as any[]) || []
+              ).some((rt: any) => rt?.forSale !== false) && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-gray-700 font-semibold text-sm mb-1">
+                    Book a Seat / Table
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Pick your seats or a whole table on the venue layout.
+                  </p>
+                  {referralRequired && (
+                    <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mb-3">
+                      Booking needs a referral code from an agent.
+                    </p>
+                  )}
+                  <button
+                    onClick={openRoundTableBooking}
+                    className="w-full h-14 rounded-xl border-2 font-bold text-lg text-white shadow-md transition-all hover:opacity-90"
+                    style={{
+                      backgroundColor: design?.primaryColor || "#f97316",
+                      borderColor: design?.primaryColor || "#f97316",
+                    }}
+                  >
+                    Book a Seat / Table
                   </button>
                 </div>
               )}
@@ -11314,7 +11443,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 round table is actually sellable; "not for sale" round tables
                 are layout references only, so the box is hidden for them. */}
               {roundTableData.some((rt: any) => rt.forSale !== false) && (
-                <div className="space-y-5">
+                <div ref={roundTableSectionRef} className="space-y-5 scroll-mt-4">
                   {/* Header */}
                   <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">

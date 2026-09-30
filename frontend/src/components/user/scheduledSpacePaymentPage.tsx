@@ -44,6 +44,10 @@ interface OrderData {
   registrant?: { name?: string; email?: string };
   selectedSlots: SelectedSlot[];
   total: number;
+  // True when every picked facility issues its ticket instantly (no
+  // organizer approval) — switches the pre-submit copy below. Absent on an
+  // older event page = approval wording, the safe default.
+  instant?: boolean;
 }
 
 function formatTime(seconds: number) {
@@ -87,6 +91,11 @@ export default function ScheduledSpacePaymentPage() {
   const [screenshotPreview, setScreenshotPreview] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // Set when every picked facility is "instant ticket": select-slots then
+  // comes back already Completed with the QR, so the success screen shows
+  // the ticket itself instead of "the organizer will confirm".
+  const [completedRequest, setCompletedRequest] = useState<any>(null);
+  const [downloadingTicket, setDownloadingTicket] = useState(false);
 
   const pickScreenshot = (f: File | null) => {
     setScreenshot(f);
@@ -348,6 +357,8 @@ export default function ScheduledSpacePaymentPage() {
       if (!res.ok) {
         throw new Error(result?.message || "Failed to submit payment");
       }
+      const instant = result?.data?.status === "Completed";
+      if (instant) setCompletedRequest(result.data);
 
       // Screenshot goes up as a separate multipart call, same two-step shape
       // as the Stalls flow — the main submit stays plain JSON.
@@ -367,11 +378,20 @@ export default function ScheduledSpacePaymentPage() {
       }
 
       setSubmitted(true);
-      toast({
-        duration: 5000,
-        title: "Payment submitted",
-        description: "The organizer will confirm your booking shortly.",
-      });
+      toast(
+        instant
+          ? {
+              duration: 6000,
+              title: "Booking confirmed",
+              description:
+                "Your check-in QR ticket is below and has been emailed to you.",
+            }
+          : {
+              duration: 5000,
+              title: "Payment submitted",
+              description: "The organizer will confirm your booking shortly.",
+            },
+      );
     } catch (err: any) {
       toast({
         duration: 5000,
@@ -383,6 +403,118 @@ export default function ScheduledSpacePaymentPage() {
       setSubmitting(false);
     }
   };
+
+  // Same blob download the event page's ticket dialog does
+  // (handleDownloadScheduledSpaceTicket in eventFront.tsx).
+  const handleDownloadTicket = async () => {
+    const id = completedRequest?._id || orderData.requestId;
+    setDownloadingTicket(true);
+    try {
+      const response = await fetch(
+        `${apiURL}/scheduled-spaces/${id}/download-ticket`,
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || "Failed to download ticket");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `scheduled_space_ticket_${orderData.eventInfo?.title || id}.pdf`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Couldn't download ticket",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingTicket(false);
+    }
+  };
+
+  if (submitted && completedRequest) {
+    // Instant-ticket facility: the booking is already Completed — show the
+    // QR right here (a copy is in their inbox too) instead of "wait for
+    // the organizer". Mirrors the Completed view of the event page's
+    // status dialog.
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-8 pb-8 text-center space-y-4">
+            <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto" />
+            <h2 className="text-xl font-semibold">Booking Confirmed</h2>
+            <p className="text-sm text-muted-foreground">
+              Your check-in QR ticket is ready — show it at the venue. A copy
+              has been emailed to {completedRequest.email || "you"}.
+            </p>
+            {completedRequest.qrCodeImage && (
+              <div className="flex justify-center">
+                <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-4">
+                  <img
+                    src={completedRequest.qrCodeImage}
+                    alt="Check-in QR code"
+                    className="w-40 h-40"
+                  />
+                </div>
+              </div>
+            )}
+            <div className="rounded-lg border p-3 space-y-1 text-left">
+              {(completedRequest.selectedSlots || []).map(
+                (s: any, i: number) => (
+                  <div key={i} className="flex justify-between text-xs">
+                    <span>
+                      {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
+                    </span>
+                    <span>{formatPrice(s.price)}</span>
+                  </div>
+                ),
+              )}
+              <div className="flex justify-between text-sm font-semibold border-t pt-1 mt-1">
+                <span>Total Paid</span>
+                <span>
+                  {formatPrice(
+                    completedRequest.paidAmount ||
+                      completedRequest.slotsTotal ||
+                      0,
+                  )}
+                </span>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={downloadingTicket}
+              onClick={handleDownloadTicket}
+            >
+              {downloadingTicket ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Downloading…
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Ticket
+                </>
+              )}
+            </Button>
+            <Button className="w-full" onClick={() => navigate(-1)}>
+              Back to Event
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -579,12 +711,22 @@ export default function ScheduledSpacePaymentPage() {
             <CardTitle className="text-base">After Payment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-xs text-gray-500">
-              Optional: add your transaction ID or a payment screenshot so
-              the organizer can verify faster. If you can't, just tap{" "}
-              <span className="font-medium">I have Paid</span> — you can send
-              proof to the organizer directly and they'll confirm it.
-            </p>
+            {orderData.instant ? (
+              <p className="text-xs text-gray-500">
+                Your check-in QR ticket is issued as soon as you tap{" "}
+                <span className="font-medium">I have Paid</span> — it appears
+                right here and is emailed to you. Add your transaction ID or a
+                payment screenshot so the organizer has a record of your
+                payment.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500">
+                Optional: add your transaction ID or a payment screenshot so
+                the organizer can verify faster. If you can't, just tap{" "}
+                <span className="font-medium">I have Paid</span> — you can send
+                proof to the organizer directly and they'll confirm it.
+              </p>
+            )}
             <div>
               <Label>Transaction / Reference ID</Label>
               <Input
@@ -637,8 +779,9 @@ export default function ScheduledSpacePaymentPage() {
             </div>
             {!transactionId.trim() && !screenshot && (
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                No screenshot or transaction ID? No problem — submit anyway
-                and send your payment proof to the organizer directly.
+                {orderData.instant
+                  ? "No screenshot or transaction ID? You can still submit — please keep your payment proof in case the organizer asks for it."
+                  : "No screenshot or transaction ID? No problem — submit anyway and send your payment proof to the organizer directly."}
               </p>
             )}
             <Button

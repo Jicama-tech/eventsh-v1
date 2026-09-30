@@ -583,6 +583,11 @@ export class ScheduledSpaceTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleSlotDto)
   slots?: ScheduleSlotDto[];
+  // "Not for sale" = layout reference only, never bookable (mirrors Spaces).
+  @IsBoolean() @IsOptional() forSale?: boolean;
+  // false = "instant ticket" (no organizer approval step); unset/true =
+  // the organizer confirms each booking before the ticket is issued.
+  @IsBoolean() @IsOptional() requiresApproval?: boolean;
   // Legacy operator assignment — accepted for old templates, no longer read.
   // Referral codes only attribute bookings; they never filter spaces.
   @IsString() @IsOptional() operatorId?: string;
@@ -606,6 +611,8 @@ export class PositionedScheduledSpaceDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleSlotDto)
   slots?: ScheduleSlotDto[];
+  @IsBoolean() @IsOptional() forSale?: boolean;
+  @IsBoolean() @IsOptional() requiresApproval?: boolean;
   @IsNumber() x: number;
   @IsNumber() y: number;
   @IsNumber() @IsOptional() rotation?: number;

@@ -366,6 +366,16 @@ class ScheduledSpaceTemplate {
   @Prop({ default: 0 }) price: number;
   @Prop() color?: string;
   @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
+  // A "not for sale" facility is a layout reference only (e.g. a practice
+  // court or a pool that isn't open for booking) and cannot be booked —
+  // same toggle as Spaces / Round Tables. Unset (older data) = for sale.
+  @Prop({ default: true }) forSale: boolean;
+  // Booking approval. true (or unset — every template from before the
+  // toggle existed) = the organizer confirms each booking before the QR
+  // ticket is issued (the original flow). false = "instant ticket": the
+  // booking completes the moment the visitor picks their slots (and
+  // submits payment for a priced space) — ticket emailed and shown at once.
+  @Prop({ default: true }) requiresApproval: boolean;
   // Legacy: operator this space was once assigned to. No longer read —
   // every space is shown to every visitor, and operator referral codes only
   // attribute bookings (see OperatorsService.resolveReferral).
@@ -388,6 +398,12 @@ class PositionedScheduledSpace {
   @Prop({ default: 0 }) price: number;
   @Prop() color?: string;
   @Prop({ type: [Object], default: [] }) slots: ScheduleSlot[];
+  // Snapshot of the template's flag at placement time (the designer keeps
+  // it in step when the template is toggled later). Readers still consult
+  // the template too — see ScheduledSpacesService.isForSale.
+  @Prop({ default: true }) forSale: boolean;
+  // Same snapshot rule — see ScheduledSpacesService.requiresApproval.
+  @Prop({ default: true }) requiresApproval: boolean;
   @Prop() x: number;
   @Prop() y: number;
   @Prop({ default: 0 }) rotation: number;

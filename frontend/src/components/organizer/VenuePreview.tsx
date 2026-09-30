@@ -248,6 +248,9 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
           const isCircle = space.shape === "Circle";
           const w = (isCircle ? space.diameter : space.width) || 100;
           const h = (isCircle ? space.diameter : space.height) || 100;
+          // Reference-only facility ("Not for sale") — hatched, same as a
+          // not-for-sale Space above, so it reads as on-the-map-not-bookable.
+          const notForSale = space.forSale === false;
           return (
             <div
               key={`ss-${space.positionId}`}
@@ -261,6 +264,12 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
                 transformOrigin: "center center",
                 backgroundColor: space.color || "#3b82f6",
                 border: `2px solid ${space.color ? space.color + "88" : "#1d4ed8"}`,
+                ...(notForSale
+                  ? {
+                      backgroundImage:
+                        "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)",
+                    }
+                  : {}),
                 borderRadius: isCircle ? "50%" : 6,
                 color: "#fff",
                 display: "flex",
@@ -313,6 +322,24 @@ const VenuePreview = forwardRef<HTMLDivElement, Props>(function VenuePreview(
                 >
                   {space.facilityType}
                 </div>
+                {/* Third line only for a reference facility — the event
+                    page shows the same "Not for sale" line, and this
+                    preview (and the PDF built from it) must match it. */}
+                {notForSale && (
+                  <div
+                    style={{
+                      fontSize: Math.max(5, 7 * s),
+                      fontWeight: 600,
+                      opacity: 0.9,
+                      lineHeight: 1.1,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    Not for sale
+                  </div>
+                )}
               </div>
             </div>
           );

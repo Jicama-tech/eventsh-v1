@@ -2423,8 +2423,10 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     const sponsors =
       Array.isArray(e.sponsorTypes) && e.sponsorTypes.length > 0;
     // Scheduled Spaces show as soon as the organizer has placed at least
-    // one rect or round space with a defined slot — same threshold the
-    // eventfront entry card uses to decide whether to show itself.
+    // one rect or round space with a defined slot — the eventfront entry
+    // card uses the same threshold plus a "for sale" check that's skipped
+    // here on purpose: requests booked before a facility was flipped to
+    // "Not for sale" must stay reachable.
     const scheduledSpaces =
       (Array.isArray(e.venueScheduledSpaces) &&
         e.venueScheduledSpaces.some(
