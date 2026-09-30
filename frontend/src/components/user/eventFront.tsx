@@ -1710,10 +1710,32 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   }, [eventId, id, organizationName]);
 
-  // Fetch round table availability — only when event has round tables
-  const hasRoundTables = (eventData?.venueRoundTables?.length || 0) > 0;
+  // Placed round tables straight from the event document. Tolerates both
+  // shapes the collection has been saved in over time — a flat array (the
+  // form flattens + tags each row with its venueConfigId) or an object
+  // keyed by venueConfigId (older saves).
+  const placedRoundTables = useMemo<any[]>(() => {
+    const raw = (eventData as any)?.venueRoundTables;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      return Object.entries(raw).flatMap(([cfgId, rows]) =>
+        Array.isArray(rows)
+          ? rows.map((r: any) => ({ venueConfigId: cfgId, ...r }))
+          : [],
+      );
+    }
+    return [];
+  }, [eventData]);
+
+  // Round tables: the map renders from the event document FIRST, so an
+  // event whose layout holds only round tables shows its venue right away
+  // (instead of "No venue layouts available" while the availability call
+  // is still in flight — or forever, if it fails). The availability fetch
+  // then layers live bookedChairs / isFullyBooked on top.
+  const hasRoundTables = placedRoundTables.length > 0;
   useEffect(() => {
     if (!hasRoundTables) return;
+    setRoundTableData((prev) => (prev.length > 0 ? prev : placedRoundTables));
     const eid = eventId || id;
     if (!eid) return;
     const fetchRoundTables = async () => {
@@ -1723,18 +1745,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         );
         if (res.ok) {
           const result = await res.json();
-          if (result.success && result.data?.roundTables) {
-            setRoundTableData(result.data.roundTables);
+          const live = result?.data?.roundTables;
+          const rows: any[] = Array.isArray(live)
+            ? live
+            : live && typeof live === "object"
+              ? Object.values(live).flat()
+              : [];
+          if (result.success && rows.length > 0) {
+            setRoundTableData(rows);
             // Keep the layout COLLAPSED by default — the visitor clicks the
             // venue name header to reveal the map (incl. round-table chairs).
           }
         }
       } catch {
-        // Non-critical
+        // Non-critical — the seeded event-document rows keep the map up.
       }
     };
     fetchRoundTables();
-  }, [hasRoundTables, eventId, id]);
+  }, [hasRoundTables, placedRoundTables, eventId, id]);
 
   // Compute the rendered canvas extents from currently-placed items.
   // Inlined here (and inside the ResizeObservers) instead of using a
@@ -10696,6 +10724,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             <TabsContent value="venue" className="mt-4 space-y-6">
               {(venueTables && Object.keys(venueTables).length > 0) ||
               roundTableData.length > 0 ||
+              hasPlacedRoundTables ||
               currentLayoutScheduledSpaces.length > 0 ? (
                 <div className="space-y-5">
                   {/* Layout Selector — only published venues are offered */}

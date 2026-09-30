@@ -529,10 +529,23 @@ export class RoundTableBookingsService {
     const event = await this.eventModel.findById(eventId);
     if (!event) throw new NotFoundException("Event not found");
 
+    // Always hand back a flat array — older events may hold the collection
+    // keyed by venueConfigId, and the event page indexes it as a list.
+    const raw: any = event.venueRoundTables;
+    const roundTables: any[] = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === "object"
+        ? Object.entries(raw).flatMap(([cfgId, rows]: [string, any]) =>
+            Array.isArray(rows)
+              ? rows.map((r: any) => ({ venueConfigId: cfgId, ...r }))
+              : [],
+          )
+        : [];
+
     return {
       success: true,
       data: {
-        roundTables: event.venueRoundTables || [],
+        roundTables,
         venueConfig: event.venueConfig || [],
       },
     };
