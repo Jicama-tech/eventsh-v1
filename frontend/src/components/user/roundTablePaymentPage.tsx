@@ -205,7 +205,7 @@ const RoundTablePaymentPage = () => {
       if (successful.length > 0) {
         setConfirmed(true);
         setConfirmedBookings(successful.map((r) => r.data));
-        toast({ title: "Payment Submitted!", description: "The organizer will review and confirm your payment. Your ticket will be sent via WhatsApp.", duration: 8000 });
+        toast({ title: "Payment Submitted!", description: "The organizer will review and confirm your payment. Your QR ticket will be emailed to you (and sent on WhatsApp if you gave a number).", duration: 8000 });
         setShowFeedback(true);
       }
     } catch (err: any) {
@@ -446,7 +446,7 @@ const RoundTablePaymentPage = () => {
               </div>
               <h3 className="text-lg font-bold text-amber-700">Payment Submitted!</h3>
               <p className="text-sm text-gray-600 max-w-sm mx-auto">
-                Your payment has been submitted for review. Once the organizer confirms, your QR ticket will be sent to your WhatsApp automatically.
+                Your payment has been submitted for review. Once the organizer confirms, your QR ticket is emailed to you automatically (and sent on WhatsApp if you gave a number).
               </p>
 
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left space-y-2">
@@ -461,7 +461,7 @@ const RoundTablePaymentPage = () => {
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold mt-0.5 flex-shrink-0">3</div>
-                  <p className="text-xs text-gray-600">QR ticket is sent to your WhatsApp</p>
+                  <p className="text-xs text-gray-600">QR ticket is emailed to you (and WhatsApp, if given)</p>
                 </div>
               </div>
 
