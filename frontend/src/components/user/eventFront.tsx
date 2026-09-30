@@ -777,6 +777,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [downloadingRtTicketId, setDownloadingRtTicketId] = useState<
     string | null
   >(null);
+  // Booked-vs-vacant seats are shown only to a Google-verified visitor.
+  // Before sign-in every round table is drawn as open — the layout is
+  // still fully visible, it just doesn't reveal who's taken what. Clicking
+  // any seat first opens the sign-in dialog (ensureRoundTableAuth), after
+  // which the real availability appears.
+  const canSeeRoundTableAvailability = !!roundTableAuthedEmail;
   const [rtSeatGuests, setRtSeatGuests] = useState<
     Record<
       string,
@@ -11286,8 +11292,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       inCrop(rt?.x, rt?.y),
                                   )
                                   .map((rt: any) => {
+                                    // Which seats are taken is only revealed after Google sign-in —
+                                    // until then every table reads as open (see canSeeRoundTableAvailability).
                                     const bookedChairs: number[] =
-                                      rt.bookedChairs || [];
+                                      canSeeRoundTableAvailability ? rt.bookedChairs || [] : [];
                                     const isReference = rt.forSale === false;
                                     const mySelection =
                                       roundTableSelections.find(
@@ -11297,8 +11305,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     const mySelectedChairs =
                                       mySelection?.selectedChairIndices || [];
                                     const isFullyBooked =
-                                      rt.isFullyBooked ||
-                                      bookedChairs.length >= rt.numberOfChairs;
+                                      canSeeRoundTableAvailability &&
+                                      (rt.isFullyBooked ||
+                                      bookedChairs.length >= rt.numberOfChairs);
                                     const diameter = rt.tableDiameter || 120;
                                     const chairSz = Math.max(
                                       12,
@@ -11787,11 +11796,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               (s: number, rt: any) => s + rt.numberOfChairs,
                               0,
                             );
-                            const bookedSeats = tablesInCat.reduce(
-                              (s: number, rt: any) =>
-                                s + (rt.bookedChairs?.length || 0),
-                              0,
-                            );
+                            const bookedSeats = canSeeRoundTableAvailability
+                              ? tablesInCat.reduce(
+                                  (s: number, rt: any) =>
+                                    s + (rt.bookedChairs?.length || 0),
+                                  0,
+                                )
+                              : 0;
                             return (
                               <div
                                 key={cat}
@@ -11840,7 +11851,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       />
                                     </div>
                                     <span className="text-[10px] text-gray-400">
-                                      {totalSeats - bookedSeats} left
+                                      {canSeeRoundTableAvailability
+                                        ? `${totalSeats - bookedSeats} left`
+                                        : `${totalSeats} seats`}
                                     </span>
                                   </div>
                                 </div>
@@ -11980,8 +11993,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                                 {/* Round Tables — positioned relative to pad offset */}
                                 {roundTableData.map((rt: any) => {
+                                  // Which seats are taken is only revealed after Google sign-in —
+                                  // until then every table reads as open (see canSeeRoundTableAvailability).
                                   const bookedChairs: number[] =
-                                    rt.bookedChairs || [];
+                                    canSeeRoundTableAvailability ? rt.bookedChairs || [] : [];
                                   const mySelection = roundTableSelections.find(
                                     (sel) =>
                                       sel.tablePositionId === rt.positionId,
@@ -11989,8 +12004,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   const mySelectedChairs =
                                     mySelection?.selectedChairIndices || [];
                                   const isFullyBooked =
-                                    rt.isFullyBooked ||
-                                    bookedChairs.length >= rt.numberOfChairs;
+                                    canSeeRoundTableAvailability &&
+                                    (rt.isFullyBooked ||
+                                    bookedChairs.length >= rt.numberOfChairs);
                                   const d = Math.round(
                                     (rt.tableDiameter || 120) * 0.55,
                                   );
