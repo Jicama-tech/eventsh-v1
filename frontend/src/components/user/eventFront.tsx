@@ -7362,10 +7362,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
   };
 
+  // Store settings can be missing (organizer never saved a storefront design,
+  // or the store lookup failed) — fall back to the event page's own design
+  // colour rather than crashing the whole page on a null read.
   const infoBadgeStyle = {
-    backgroundColor: settings.settings.design.secondaryColor,
+    backgroundColor:
+      settings?.settings?.design?.secondaryColor ||
+      design?.secondaryColor ||
+      "#0ea5e9",
     color: "#fff",
-    fontFamily: settings.settings.design.fontFamily,
+    fontFamily: settings?.settings?.design?.fontFamily,
   };
 
   const gradientHeadingStyle: React.CSSProperties = {
@@ -11416,16 +11422,23 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             top: cy - diameter / 2,
                                             width: diameter,
                                             height: diameter,
-                                            background: hasSel
-                                              ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
-                                              : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                            // One backgroundImage (hatch layered over the
+                                            // tint for reference tables) — mixing the
+                                            // `background` shorthand with backgroundImage
+                                            // trips React's conflicting-style warning.
+                                            backgroundImage: `${
+                                              isReference
+                                                ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px), "
+                                                : ""
+                                            }${
+                                              hasSel
+                                                ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
+                                                : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`
+                                            }`,
                                             border: hasSel
                                               ? `2.5px solid ${col}`
                                               : `1.5px solid ${col}55`,
                                             opacity: isReference ? 0.7 : 1,
-                                            backgroundImage: isReference
-                                              ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)"
-                                              : undefined,
                                             cursor: isReference
                                               ? "not-allowed"
                                               : rt.sellingMode === "table"
@@ -12445,6 +12458,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     phone: value,
                                   })
                                 }
+                                // With countryCodeEditable off the widget
+                                // needs a country pre-selected, otherwise
+                                // typed digits are dropped until the visitor
+                                // opens the flag menu. Default to the
+                                // organizer's country like the other forms.
+                                country={country === "SG" ? "sg" : "in"}
                                 enableSearch={true}
                                 countryCodeEditable={false}
                                 preferredCountries={[
