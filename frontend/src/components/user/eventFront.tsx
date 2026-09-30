@@ -11432,12 +11432,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                                 : ""
                                             }${
                                               hasSel
-                                                ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
-                                                : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`
+                                                ? `radial-gradient(circle at 40% 35%, ${col}80, ${col}55)`
+                                                : `radial-gradient(circle at 40% 35%, ${col}60, ${col}38)`
                                             }`,
+                                            // Solid-colour border + a stronger tint so
+                                            // the table reads clearly against the grid.
                                             border: hasSel
-                                              ? `2.5px solid ${col}`
-                                              : `1.5px solid ${col}55`,
+                                              ? `3px solid ${col}`
+                                              : `2px solid ${col}`,
                                             opacity: isReference ? 0.7 : 1,
                                             cursor: isReference
                                               ? "not-allowed"
@@ -11450,7 +11452,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             style={{
                                               fontSize: 9,
                                               fontWeight: 800,
-                                              color: col,
+                                              // Dark label — the tint behind it is now
+                                              // the table colour itself.
+                                              color: "#111827",
                                               textAlign: "center",
                                               lineHeight: 1.1,
                                               padding: "0 2px",
@@ -12120,11 +12124,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           width: d,
                                           height: d,
                                           background: hasSel
-                                            ? `radial-gradient(circle at 40% 35%, ${col}30, ${col}15)`
-                                            : `radial-gradient(circle at 40% 35%, ${col}18, ${col}08)`,
+                                            ? `radial-gradient(circle at 40% 35%, ${col}80, ${col}55)`
+                                            : `radial-gradient(circle at 40% 35%, ${col}60, ${col}38)`,
                                           border: hasSel
-                                            ? `2.5px solid ${col}`
-                                            : `1.5px solid ${col}55`,
+                                            ? `3px solid ${col}`
+                                            : `2px solid ${col}`,
                                           boxShadow: hasSel
                                             ? `0 0 0 3px ${col}15, 0 4px 12px ${col}20`
                                             : `0 1px 4px rgba(0,0,0,0.06)`,
@@ -12149,7 +12153,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           style={{
                                             fontSize: 7,
                                             fontWeight: 800,
-                                            color: col,
+                                            color: "#111827",
                                             textAlign: "center",
                                             lineHeight: 1.1,
                                             letterSpacing: 0.2,
