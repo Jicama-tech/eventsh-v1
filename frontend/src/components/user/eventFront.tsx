@@ -1795,8 +1795,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // Only items belonging to the hall being sized count toward its extent.
     // Untagged/legacy ("" / "default") items belong to the first hall only,
     // so another hall's items can't inflate this one into empty space.
+    // Same orphan rule as belongsToLayout below: a tag that matches no hall
+    // counts as the first hall.
     const inLayout = (cfgId?: string) =>
-      cfgId && cfgId !== "default"
+      cfgId && cfgId !== "default" && layoutIds.includes(cfgId)
         ? cfgId === layoutId
         : currentLayoutIndex === 0;
     const tables =
@@ -6557,7 +6559,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // belong ONLY to the first hall — otherwise they'd leak onto every hall in
   // a multi-venue event.
   const belongsToLayout = (cfgId?: string) => {
-    if (cfgId && cfgId !== "default") return cfgId === currentLayoutId;
+    if (cfgId && cfgId !== "default") {
+      // A tag matching no hall at all (seeded/imported events whose venue
+      // configs carry no id, or a hall deleted after placement) would leave
+      // the item unreachable on every hall — treat it like an untagged
+      // legacy item and show it on the first hall instead.
+      if (!layoutIds.includes(cfgId)) return currentLayoutIndex === 0;
+      return cfgId === currentLayoutId;
+    }
     return currentLayoutIndex === 0;
   };
 
