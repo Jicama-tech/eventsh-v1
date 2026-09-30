@@ -494,6 +494,10 @@ interface RoundTableTemplate {
   // A "not for sale" round table is a layout reference only (e.g. a
   // standing cocktail table / decoration) and cannot be booked.
   forSale?: boolean;
+  // Seat selection: false/unset = visitors pick their own chairs / table on
+  // the venue map; true = "Organizer Allots" — visitors only request seats
+  // of this type and the organizer assigns the table from the dashboard.
+  organizerAllots?: boolean;
 }
 
 interface PositionedRoundTable extends RoundTableTemplate {
@@ -10243,6 +10247,7 @@ export function CreateEventForm({
     color: "#8B5CF6",
     tableDiameter: "120",
     forSale: true,
+    organizerAllots: false,
   });
   // When set, the round-table form edits this existing template in place.
   const [editingRoundTableId, setEditingRoundTableId] = useState<string | null>(
@@ -11023,6 +11028,7 @@ export function CreateEventForm({
       color: "#8B5CF6",
       tableDiameter: "120",
       forSale: true,
+      organizerAllots: false,
     });
     setEditingRoundTableId(null);
   };
@@ -11084,6 +11090,7 @@ export function CreateEventForm({
       color: currentRoundTable.color,
       tableDiameter: parseInt(currentRoundTable.tableDiameter) || 120,
       forSale: currentRoundTable.forSale,
+      organizerAllots: !!currentRoundTable.organizerAllots,
     };
 
     if (editingRoundTableId) {
@@ -11126,6 +11133,7 @@ export function CreateEventForm({
       color: t.color || "#8B5CF6",
       tableDiameter: t.tableDiameter != null ? String(t.tableDiameter) : "120",
       forSale: t.forSale !== false,
+      organizerAllots: t.organizerAllots === true,
     });
     setEditingRoundTableId(id);
   };
@@ -15844,6 +15852,69 @@ export function CreateEventForm({
                         </div>
                       )}
 
+                      {/* Seat selection — who picks the actual chairs/table.
+                          "Visitor Picks" is the original flow (click seats on
+                          the map). "Organizer Allots" lets visitors only
+                          request N seats / a table of this type; you assign
+                          the table and chairs from Participants → Round
+                          Tables before confirming their payment. */}
+                      {currentRoundTable.forSale && (
+                        <div>
+                          <Label>{t("Seat Selection")}</Label>
+                          <div className="flex gap-2 mt-1">
+                            <button
+                              type="button"
+                              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${
+                                !currentRoundTable.organizerAllots
+                                  ? "border-green-500 bg-green-50 text-green-700"
+                                  : "border-border text-muted-foreground hover:bg-muted"
+                              }`}
+                              onClick={() =>
+                                setCurrentRoundTable({
+                                  ...currentRoundTable,
+                                  organizerAllots: false,
+                                })
+                              }
+                            >
+                              Visitor Picks
+                            </button>
+                            <button
+                              type="button"
+                              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border-2 transition-all ${
+                                currentRoundTable.organizerAllots
+                                  ? "border-amber-500 bg-amber-50 text-amber-700"
+                                  : "border-border text-muted-foreground hover:bg-muted"
+                              }`}
+                              onClick={() =>
+                                setCurrentRoundTable({
+                                  ...currentRoundTable,
+                                  organizerAllots: true,
+                                })
+                              }
+                            >
+                              Organizer Allots
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {currentRoundTable.organizerAllots
+                              ? "Visitors request seats; you assign the table and chairs"
+                              : "Visitors click the seats or table they want on the layout"}
+                          </p>
+                        </div>
+                      )}
+
+                      {currentRoundTable.forSale &&
+                        currentRoundTable.organizerAllots && (
+                          <div className="md:col-span-2 lg:col-span-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                            <strong>Organizer allots seats</strong> — visitors
+                            can't click chairs of this table type on the
+                            layout. They request how many seats they need (or
+                            a whole table), pay, and you allot the exact table
+                            and chairs from Participants → Round Tables. Payment
+                            can only be confirmed once seats are allotted.
+                          </div>
+                        )}
+
                       {currentRoundTable.forSale &&
                         parseInt(currentRoundTable.numberOfChairs) !== 0 && (
                           <div>
@@ -16222,6 +16293,14 @@ export function CreateEventForm({
                                         : "Per Chair"}
                                     </span>
                                   </div>
+                                  {template.organizerAllots && (
+                                    <div className="flex justify-between">
+                                      <span>Seats:</span>
+                                      <span className="font-semibold text-amber-600">
+                                        Allotted by you
+                                      </span>
+                                    </div>
+                                  )}
                                   <div className="flex justify-between">
                                     {" "}
                                     <span>Price:</span>

@@ -32,14 +32,30 @@ export class CreateRoundTableBookingDto {
   @IsMongoId()
   organizerId: string;
 
+  // Omitted for an organizer-allotted booking: the visitor then sends the
+  // template (`templateId`) and how many seats they want instead, and the
+  // organizer assigns the table later.
+  @IsOptional()
   @IsString()
-  tablePositionId: string;
+  tablePositionId?: string;
 
-  // May be empty for a whole-table booking of a standing table (0 chairs).
-  // Per-chair bookings are validated to be non-empty in the service.
+  @IsOptional()
+  @IsString()
+  templateId?: string;
+
+  // Chair-mode organizer-allotted bookings only: how many seats to allot.
+  // Whole-table templates always book the full table.
+  @IsOptional()
+  @IsNumber()
+  requestedSeats?: number;
+
+  // May be empty for a whole-table booking of a standing table (0 chairs)
+  // or an organizer-allotted booking. Per-chair visitor-picked bookings
+  // are validated to be non-empty in the service.
+  @IsOptional()
   @IsArray()
   @IsNumber({}, { each: true })
-  selectedChairIndices: number[];
+  selectedChairIndices?: number[];
 
   @IsString()
   visitorName: string;

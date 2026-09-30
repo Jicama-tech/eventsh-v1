@@ -750,6 +750,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       selectedChairIndices: number[];
       amount: number;
       color: string;
+      // Set for an organizer-allotted request: no table picked, the
+      // organizer assigns one later. selectedChairIndices then holds
+      // placeholder seats 1..N so seat counts / guest fields still work.
+      allot?: { templateId: string };
     }[]
   >([]);
   const [rtVisitorInfo, setRtVisitorInfo] = useState({
@@ -1087,6 +1091,70 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     (isMember && rt?.memberTablePrice != null
       ? rt.memberTablePrice
       : rt?.tablePrice) || 0;
+
+  // "Organizer Allots" seat selection (per round-table template): the
+  // visitor can't click chairs of that type — they request seats and the
+  // organizer assigns the table. Read from the placed row AND its template
+  // (rows snapshot template fields at placement time), same rule the
+  // backend applies.
+  const roundTableTemplatesById = useMemo(
+    () =>
+      new Map<string, any>(
+        (((eventData as any)?.roundTableTemplates || []) as any[]).map(
+          (t: any) => [String(t?.id), t],
+        ),
+      ),
+    [eventData],
+  );
+  const isOrganizerAllotted = (rt: any): boolean =>
+    rt?.organizerAllots === true ||
+    roundTableTemplatesById.get(String(rt?.templateId ?? rt?.id))
+      ?.organizerAllots === true;
+  const notifyOrganizerAllots = (rt: any) =>
+    toast({
+      duration: 4000,
+      title: "Seats are allotted by the organizer",
+      description: `Use "Request seats" under ${rt?.category || "this"} tables below — the organizer will assign your table.`,
+    });
+  // Requested seat count per category for organizer-allotted chair-mode
+  // tables (the number box next to "Request seats").
+  const [rtRequestSeats, setRtRequestSeats] = useState<Record<string, number>>(
+    {},
+  );
+  const requestAllottedSeats = (cat: string, sample: any) => {
+    if (!ensureRoundTableAuth()) return;
+    const capacity = Number(sample?.numberOfChairs) || 0;
+    const tableMode = sample?.sellingMode === "table";
+    const want = tableMode
+      ? capacity
+      : Math.min(
+          Math.max(1, Math.floor(rtRequestSeats[cat] ?? 1)),
+          capacity || 1,
+        );
+    const templateId = String(sample?.templateId ?? sample?.id ?? "");
+    const amount = tableMode
+      ? rtTablePrice(sample)
+      : rtChairPrice(sample) * want;
+    setRoundTableSelections((prev) => [
+      ...prev.filter((s) => s.allot?.templateId !== templateId),
+      {
+        tablePositionId: `allot-${templateId}`,
+        tableName: `${cat} table`,
+        tableCategory: cat,
+        sellingMode: tableMode ? "table" : "chair",
+        selectedChairIndices: Array.from({ length: want }, (_, i) => i),
+        amount,
+        color: sample?.color || "#8B5CF6",
+        allot: { templateId },
+      },
+    ]);
+    toast({
+      duration: 3500,
+      title: tableMode ? "Table requested" : `${want} seat(s) requested`,
+      description:
+        "The organizer will allot your exact table after booking — continue below to pay.",
+    });
+  };
 
   // NEW: Table Selection States
   const [selectedTables, setSelectedTables] = useState<any[]>([]);
@@ -11330,6 +11398,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       if (isReference) return;
                                       // Sign in with Google before picking seats — mirrors Scheduled Spaces.
                                       if (!ensureRoundTableAuth()) return;
+                                      if (isOrganizerAllotted(rt)) {
+                                        notifyOrganizerAllots(rt);
+                                        return;
+                                      }
                                       if (bookedChairs.includes(ci)) return;
                                       if (rt.sellingMode === "table") {
                                         if (mySelection) {
@@ -11873,6 +11945,59 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         : `${totalSeats} seats`}
                                     </span>
                                   </div>
+                                  {/* Organizer-allotted type: no chair picking —
+                                      request a count (or a whole table). */}
+                                  {isOrganizerAllotted(sample) && (
+                                    <div className="mt-2 space-y-1.5">
+                                      <p className="text-[10px] font-medium text-amber-700">
+                                        Seats allotted by the organizer
+                                      </p>
+                                      {sample.sellingMode === "table" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            requestAllottedSeats(cat, sample)
+                                          }
+                                          className="h-7 px-2.5 rounded-md text-[11px] font-semibold text-white"
+                                          style={{
+                                            backgroundColor:
+                                              sample.color || "#8B5CF6",
+                                          }}
+                                        >
+                                          Request a table
+                                        </button>
+                                      ) : (
+                                        <div className="flex items-center gap-1.5">
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={sample.numberOfChairs || 1}
+                                            value={rtRequestSeats[cat] ?? 1}
+                                            onChange={(e) =>
+                                              setRtRequestSeats((p) => ({
+                                                ...p,
+                                                [cat]: Number(e.target.value),
+                                              }))
+                                            }
+                                            className="w-14 h-7 rounded-md border border-gray-200 px-1.5 text-xs text-gray-800"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              requestAllottedSeats(cat, sample)
+                                            }
+                                            className="h-7 px-2.5 rounded-md text-[11px] font-semibold text-white"
+                                            style={{
+                                              backgroundColor:
+                                                sample.color || "#8B5CF6",
+                                            }}
+                                          >
+                                            Request seats
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -12040,6 +12165,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     if (isReference) return;
                                     // Sign in with Google before picking seats — mirrors Scheduled Spaces.
                                     if (!ensureRoundTableAuth()) return;
+                                    if (isOrganizerAllotted(rt)) {
+                                      notifyOrganizerAllots(rt);
+                                      return;
+                                    }
                                     if (bookedChairs.includes(ci)) return;
                                     if (rt.sellingMode === "table") {
                                       if (mySelection) {
@@ -12333,9 +12462,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     {sel.tableName}
                                   </p>
                                   <p className="text-[11px] text-gray-400">
-                                    {sel.sellingMode === "table"
-                                      ? `Whole table · ${sel.selectedChairIndices.length} seats`
-                                      : `Seat ${sel.selectedChairIndices.map((c) => c + 1).join(", ")}`}
+                                    {sel.allot
+                                      ? `${sel.selectedChairIndices.length} seat(s) · table allotted by organizer`
+                                      : sel.sellingMode === "table"
+                                        ? `Whole table · ${sel.selectedChairIndices.length} seats`
+                                        : `Seat ${sel.selectedChairIndices.map((c) => c + 1).join(", ")}`}
                                     <span
                                       className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium"
                                       style={{
@@ -12743,9 +12874,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                       body: JSON.stringify({
                                         eventId: eid,
                                         organizerId,
-                                        tablePositionId: sel.tablePositionId,
-                                        selectedChairIndices:
-                                          sel.selectedChairIndices,
+                                        // Organizer-allotted request: no table,
+                                        // just the type + seat count.
+                                        ...(sel.allot
+                                          ? {
+                                              templateId: sel.allot.templateId,
+                                              requestedSeats:
+                                                sel.selectedChairIndices.length,
+                                            }
+                                          : {
+                                              tablePositionId:
+                                                sel.tablePositionId,
+                                              selectedChairIndices:
+                                                sel.selectedChairIndices,
+                                            }),
                                         visitorName: rtVisitorInfo.name,
                                         visitorEmail: rtVisitorInfo.email,
                                         visitorPhone: toE164(rtVisitorInfo.phone),
@@ -14627,8 +14769,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   Submitted: "Payment under review",
                   Pending: "Awaiting payment",
                 }[status] || status;
-              const seats =
-                b.sellingMode === "table" || b.isWholeTable
+              const seats = b.allotmentPending
+                ? `${b.numberOfSeats} seat(s) · table to be allotted by the organizer`
+                : b.sellingMode === "table" || b.isWholeTable
                   ? `Entire table (${b.numberOfSeats} seats)`
                   : `Chair(s): ${(b.selectedChairIndices || [])
                       .map((c: number) => c + 1)

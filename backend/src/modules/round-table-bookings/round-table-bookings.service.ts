@@ -22,6 +22,7 @@ import {
   RoundTablePaymentStatus,
 } from "./entities/round-table-booking.entity";
 import { CreateRoundTableBookingDto } from "./dto/create-round-table-booking.dto";
+import { AllotRoundTableDto } from "./dto/allot-round-table.dto";
 import { OtpService } from "../otp/otp.service";
 import { FeedbackService } from "../feedback/feedback.service";
 import { MembershipsService } from "../memberships/memberships.service";
@@ -81,6 +82,39 @@ export class RoundTableBookingsService {
     private readonly operatorsService: OperatorsService,
   ) {}
 
+  // Seat selection rule for a placed table (the template's "Organizer
+  // Allots" toggle). Read from BOTH the placed row and its template: the
+  // organizer form snapshots template fields onto the row at placement
+  // time, so either side saying "organizer allots" wins. Unset = the
+  // visitor picks their own seats (the original behaviour).
+  private isOrganizerAllotted(event: any, roundTable: any): boolean {
+    if (roundTable?.organizerAllots === true) return true;
+    const tplId = roundTable?.templateId ?? roundTable?.id;
+    const tpl = (event?.roundTableTemplates || []).find(
+      (t: any) => String(t?.id) === String(tplId),
+    );
+    return tpl?.organizerAllots === true;
+  }
+
+  // Member-tier pricing helper shared by both booking paths — falls back
+  // to regular prices on any miss, never throws the booking.
+  private async memberPricing(
+    organizerId: string,
+    email: string,
+    phone: string,
+  ): Promise<boolean> {
+    try {
+      const membership = await this.membershipsService.getActiveMembership(
+        organizerId,
+        email,
+        phone,
+      );
+      return !!membership;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Create a round table booking (status: Pending, awaiting payment)
    */
@@ -91,6 +125,13 @@ export class RoundTableBookingsService {
     if (eventHasEnded(event)) {
       throw new BadRequestException(EVENT_ENDED_MESSAGE);
     }
+
+    // No table picked → an organizer-allotted request (template's
+    // "Organizer Allots" seat selection).
+    if (!dto.tablePositionId) {
+      return this.createAllottedBooking(event, dto);
+    }
+    dto.selectedChairIndices = dto.selectedChairIndices || [];
 
     // Find the positioned round table
     const roundTable = (event.venueRoundTables || []).find(
@@ -104,6 +145,14 @@ export class RoundTableBookingsService {
     // cocktail table / decoration) and can never be booked.
     if (roundTable.forSale === false) {
       throw new BadRequestException("This table is not available for booking");
+    }
+
+    // Seats on this table are assigned by the organizer — the visitor can
+    // only request them, never pick specific chairs.
+    if (this.isOrganizerAllotted(event, roundTable)) {
+      throw new BadRequestException(
+        "Seats for this table are allotted by the organizer — request seats instead of picking them.",
+      );
     }
 
     // Check availability
@@ -145,18 +194,11 @@ export class RoundTableBookingsService {
 
     // Resolve member-tier pricing when this buyer holds an active
     // membership at the organizer (same lookup the storefront uses).
-    // Falls back to regular prices on any miss — never throws the booking.
-    let useMember = false;
-    try {
-      const membership = await this.membershipsService.getActiveMembership(
-        dto.organizerId,
-        dto.visitorEmail,
-        dto.visitorPhone,
-      );
-      useMember = !!membership;
-    } catch {
-      useMember = false;
-    }
+    const useMember = await this.memberPricing(
+      dto.organizerId,
+      dto.visitorEmail,
+      dto.visitorPhone,
+    );
 
     const pick = (member: number | undefined | null, regular: number) =>
       useMember && member != null && member >= 0 ? member : regular;
@@ -210,6 +252,207 @@ export class RoundTableBookingsService {
     return {
       success: true,
       message: "Round table booking created. Please complete payment.",
+      data: omitReferralFields(booking),
+    };
+  }
+
+  // Organizer-allotted request: the visitor asked for N seats (chair
+  // mode) or a whole table (table mode) of a template whose seat selection
+  // is "Organizer Allots". No table is reserved here — the organizer picks
+  // one via allot(), and confirmPayment then books the chairs exactly as
+  // it does for a visitor-picked booking.
+  private async createAllottedBooking(
+    event: any,
+    dto: CreateRoundTableBookingDto,
+  ) {
+    const tpl = (event.roundTableTemplates || []).find(
+      (t: any) => String(t?.id) === String(dto.templateId),
+    );
+    if (!tpl) {
+      throw new NotFoundException("Round table type not found in this event");
+    }
+    if (tpl.forSale === false) {
+      throw new BadRequestException("This table type is not available for booking");
+    }
+    if (tpl.organizerAllots !== true) {
+      throw new BadRequestException(
+        "Pick your seats on the venue layout for this table type.",
+      );
+    }
+    const sellingMode: string = tpl.sellingMode === "table" ? "table" : "chair";
+    const capacity = Number(tpl.numberOfChairs) || 0;
+    let seats: number;
+    if (sellingMode === "table") {
+      seats = capacity;
+    } else {
+      seats = Math.floor(Number(dto.requestedSeats) || 0);
+      if (seats < 1) {
+        throw new BadRequestException("Request at least one seat");
+      }
+      if (capacity > 0 && seats > capacity) {
+        throw new BadRequestException(
+          `A ${tpl.name} table seats at most ${capacity}`,
+        );
+      }
+    }
+
+    const useMember = await this.memberPricing(
+      dto.organizerId,
+      dto.visitorEmail,
+      dto.visitorPhone,
+    );
+    const pick = (member: number | undefined | null, regular: number) =>
+      useMember && member != null && member >= 0 ? member : regular;
+    const amount =
+      sellingMode === "table"
+        ? pick(tpl.memberTablePrice, tpl.tablePrice || 0)
+        : pick(tpl.memberChairPrice, tpl.chairPrice || 0) * seats;
+
+    const referral = await this.operatorsService.resolveReferral(
+      String(event.organizer),
+      dto.referralCode,
+      String(event._id),
+    );
+    assertReferralIfRequired(event, referral, dto.referralCode);
+
+    const booking = await this.bookingModel.create({
+      eventId: new Types.ObjectId(dto.eventId),
+      organizerId: new Types.ObjectId(dto.organizerId),
+      tablePositionId: "",
+      tableName: "To be allotted",
+      tableCategory: tpl.category || "Standard",
+      templateId: String(tpl.id),
+      sellingMode,
+      selectedChairIndices: [],
+      isWholeTable: sellingMode === "table",
+      numberOfSeats: seats,
+      allotmentPending: true,
+      visitorName: dto.visitorName,
+      visitorEmail: dto.visitorEmail,
+      visitorPhone: dto.visitorPhone,
+      seatGuests: dto.seatGuests || [],
+      amount,
+      paymentStatus: RoundTablePaymentStatus.Pending,
+      ...(referral || {}),
+    });
+
+    return {
+      success: true,
+      message:
+        "Seat request created. The organizer will allot your table; please complete payment.",
+      data: omitReferralFields(booking),
+    };
+  }
+
+  /**
+   * Organizer assigns a table (and chairs, in chair mode) to an
+   * organizer-allotted booking. Nothing is reserved on the event yet —
+   * confirmPayment does that and re-checks for conflicts — but chairs
+   * already booked, or already allotted to another live booking, are
+   * refused here so two requests can't be pointed at the same seats.
+   */
+  async allot(bookingId: string, dto: AllotRoundTableDto) {
+    if (!Types.ObjectId.isValid(bookingId)) {
+      throw new BadRequestException("Invalid booking ID");
+    }
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) throw new NotFoundException("Booking not found");
+    if (!booking.allotmentPending) {
+      throw new BadRequestException("This booking already has its seats");
+    }
+    if (
+      [RoundTablePaymentStatus.Paid, RoundTablePaymentStatus.Refunded].includes(
+        booking.paymentStatus,
+      )
+    ) {
+      throw new BadRequestException(
+        `Cannot allot seats to a ${booking.paymentStatus} booking`,
+      );
+    }
+
+    const event = await this.eventModel.findById(booking.eventId);
+    if (!event) throw new NotFoundException("Event not found");
+    const table = (event.venueRoundTables || []).find(
+      (rt: any) => rt.positionId === dto.tablePositionId,
+    );
+    if (!table) throw new NotFoundException("Round table not found in this event");
+    if (table.forSale === false) {
+      throw new BadRequestException("That table is not for sale");
+    }
+    const tableMode: string = table.sellingMode === "table" ? "table" : "chair";
+    if (tableMode !== booking.sellingMode) {
+      throw new BadRequestException(
+        `That table is sold per ${tableMode}; this booking is per ${booking.sellingMode}`,
+      );
+    }
+    const capacity = Number(table.numberOfChairs) || 0;
+    const booked: number[] = table.bookedChairs || [];
+
+    // Chairs already promised to another live (not Paid/Failed/Refunded)
+    // booking on this table count as taken too.
+    const others = await this.bookingModel.find({
+      _id: { $ne: booking._id },
+      eventId: booking.eventId,
+      tablePositionId: table.positionId,
+      paymentStatus: {
+        $nin: [RoundTablePaymentStatus.Failed, RoundTablePaymentStatus.Refunded],
+      },
+    });
+    const held = new Set<number>(booked);
+    for (const o of others) {
+      for (const c of o.selectedChairIndices || []) held.add(c);
+      if (o.isWholeTable) {
+        for (let i = 0; i < capacity; i++) held.add(i);
+      }
+    }
+
+    let chairs: number[];
+    if (booking.sellingMode === "table") {
+      if (table.isFullyBooked || held.size > 0) {
+        throw new ConflictException("That table already has seats taken");
+      }
+      chairs = Array.from({ length: capacity }, (_, i) => i);
+    } else {
+      chairs = [...new Set(dto.selectedChairIndices || [])].sort((a, b) => a - b);
+      if (chairs.length !== booking.numberOfSeats) {
+        throw new BadRequestException(
+          `Pick exactly ${booking.numberOfSeats} chair(s) for this booking`,
+        );
+      }
+      const invalid = chairs.filter((c) => c < 0 || c >= capacity);
+      if (invalid.length > 0) {
+        throw new BadRequestException("Invalid chair selected");
+      }
+      const clash = chairs.filter((c) => held.has(c));
+      if (clash.length > 0) {
+        throw new ConflictException(
+          `Chair(s) ${clash.map((c) => c + 1).join(", ")} already taken`,
+        );
+      }
+    }
+
+    booking.tablePositionId = table.positionId;
+    booking.tableName = table.name;
+    booking.tableCategory = table.category || booking.tableCategory;
+    booking.selectedChairIndices = chairs;
+    booking.isWholeTable = booking.sellingMode === "table";
+    booking.numberOfSeats = chairs.length;
+    booking.allotmentPending = false;
+    // Guest names were collected against placeholder seats 1..N; move
+    // them onto the chairs actually allotted, in order.
+    booking.seatGuests = (booking.seatGuests || []).map((g: any, i: number) => ({
+      ...g,
+      chairIndex: chairs[i] ?? g.chairIndex,
+    }));
+    await booking.save();
+
+    return {
+      success: true,
+      message: `Allotted ${table.name}${
+        booking.sellingMode === "chair"
+          ? ` — chair(s) ${chairs.map((c) => c + 1).join(", ")}`
+          : ""
+      }`,
       data: omitReferralFields(booking),
     };
   }
@@ -294,6 +537,13 @@ export class RoundTableBookingsService {
     if (booking.paymentStatus !== RoundTablePaymentStatus.Submitted) {
       throw new BadRequestException(
         `Cannot confirm. Customer has not submitted payment yet. Status: ${booking.paymentStatus}`,
+      );
+    }
+    // An organizer-allotted booking needs its table before a ticket can
+    // name it.
+    if (booking.allotmentPending || !booking.tablePositionId) {
+      throw new BadRequestException(
+        "Allot a table and seats to this booking before confirming payment.",
       );
     }
 

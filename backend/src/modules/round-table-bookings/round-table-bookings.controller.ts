@@ -11,6 +11,7 @@ import { Response } from "express";
 import { RoundTableBookingsService } from "./round-table-bookings.service";
 import { CreateRoundTableBookingDto } from "./dto/create-round-table-booking.dto";
 import { ScanRoundTableQRDto } from "./dto/scan-round-table-qr.dto";
+import { AllotRoundTableDto } from "./dto/allot-round-table.dto";
 
 @Controller("round-table-bookings")
 export class RoundTableBookingsController {
@@ -29,6 +30,12 @@ export class RoundTableBookingsController {
   @Post("confirm-payment")
   async confirmPayment(@Body() body: { bookingId: string }) {
     return this.service.confirmPayment(body.bookingId);
+  }
+
+  // Organizer assigns the table/chairs to an organizer-allotted booking.
+  @Post(":id/allot")
+  async allot(@Param("id") id: string, @Body() dto: AllotRoundTableDto) {
+    return this.service.allot(id, dto);
   }
 
   // Declared before @Get(":id") so "check-request" isn't read as an id.

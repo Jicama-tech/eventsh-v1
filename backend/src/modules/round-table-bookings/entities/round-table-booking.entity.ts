@@ -19,10 +19,12 @@ export class RoundTableBooking {
   @Prop({ type: Types.ObjectId, ref: "Organizer", required: true })
   organizerId: Types.ObjectId;
 
-  @Prop({ required: true })
+  // Empty while an organizer-allotted booking is still waiting for its
+  // table (see allotmentPending); set by the visitor's own pick otherwise.
+  @Prop({ default: "" })
   tablePositionId: string;
 
-  @Prop({ required: true })
+  @Prop({ default: "To be allotted" })
   tableName: string;
 
   @Prop({ default: "Standard" })
@@ -54,6 +56,16 @@ export class RoundTableBooking {
 
   @Prop({ required: true })
   amount: number;
+
+  // Organizer-allotted bookings (template's "Organizer Allots" seat
+  // selection): created without a table — the visitor only requested N
+  // seats (or a whole table) of a type — and the organizer assigns the
+  // table and chairs from the dashboard (allot) before confirming payment.
+  @Prop({ default: false })
+  allotmentPending: boolean;
+
+  @Prop()
+  templateId?: string;
 
   // Operator attribution from the shared event link (?ref=). Set only by
   // the server once the code resolves to a referral-enabled operator of
