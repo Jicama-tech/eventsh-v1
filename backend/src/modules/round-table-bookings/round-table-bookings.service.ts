@@ -521,6 +521,29 @@ export class RoundTableBookingsService {
   /**
    * Get all round tables with booked chair data for an event
    */
+  // The visitor-side "have I already booked" check, keyed by email —
+  // mirrors scheduled-spaces.service.ts's checkExistingRequest. Returns
+  // every booking this email has made for this event (newest first) in
+  // `bookings`, plus the most recent one in `data`. Referral attribution is
+  // stripped, same as every other visitor-facing response. An empty result
+  // is the normal first-time case, not an error.
+  async checkExistingBookings(eventId: string, email: string) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event ID");
+    }
+    const clean = String(email || "").trim();
+    if (!clean) return { success: true, data: null, bookings: [] };
+    // Case-insensitive exact match on the stored address (collation, not a
+    // regex, so an address with regex metacharacters cannot misbehave).
+    const bookings = (
+      await this.bookingModel
+        .find({ eventId: new Types.ObjectId(eventId), visitorEmail: clean })
+        .collation({ locale: "en", strength: 2 })
+        .sort({ createdAt: -1 })
+    ).map((b) => omitReferralFields(b));
+    return { success: true, data: bookings[0] || null, bookings };
+  }
+
   async getAvailableRoundTables(eventId: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event ID");

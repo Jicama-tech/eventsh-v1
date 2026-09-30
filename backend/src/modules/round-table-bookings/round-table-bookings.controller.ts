@@ -31,6 +31,15 @@ export class RoundTableBookingsController {
     return this.service.confirmPayment(body.bookingId);
   }
 
+  // Declared before @Get(":id") so "check-request" isn't read as an id.
+  @Get("check-request/:eventId/:email")
+  async checkExistingBookings(
+    @Param("eventId") eventId: string,
+    @Param("email") email: string,
+  ) {
+    return this.service.checkExistingBookings(eventId, email);
+  }
+
   @Get("available/:eventId")
   async getAvailableRoundTables(@Param("eventId") eventId: string) {
     return this.service.getAvailableRoundTables(eventId);

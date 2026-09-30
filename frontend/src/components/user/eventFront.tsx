@@ -758,6 +758,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     phone: "",
   });
   const [rtBookingLoading, setRtBookingLoading] = useState(false);
+  // Round tables — Google sign-in gate + "your bookings" chooser, same
+  // shape as the Scheduled Space flow: the card (and any seat click before
+  // signing in) opens the auth dialog; once verified we look up that
+  // email's bookings for this event and either show them (with ticket
+  // download / finish-payment actions and a "book new" button) or drop the
+  // visitor straight onto the seat picker with their identity pre-filled.
+  const [showRoundTableAuth, setShowRoundTableAuth] = useState(false);
+  const [roundTableGoogleLoading, setRoundTableGoogleLoading] =
+    useState(false);
+  const roundTablePopupRef = useRef<Window | null>(null);
+  const [roundTableAuthedEmail, setRoundTableAuthedEmail] = useState("");
+  const [roundTableBookingList, setRoundTableBookingList] = useState<any[]>(
+    [],
+  );
+  const [showRoundTableBookingList, setShowRoundTableBookingList] =
+    useState(false);
+  const [downloadingRtTicketId, setDownloadingRtTicketId] = useState<
+    string | null
+  >(null);
   const [rtSeatGuests, setRtSeatGuests] = useState<
     Record<
       string,
@@ -2202,6 +2221,77 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduledSpaceGoogleLoading]);
+
+  useEffect(() => {
+    if (!roundTableGoogleLoading) return;
+    const KEY = "eventsh:google-member";
+    const prev = (() => {
+      try {
+        return localStorage.getItem(KEY) || "";
+      } catch {
+        return "";
+      }
+    })();
+    let handled = false;
+    let sawPopupClosed = false;
+
+    const accept = (rawEmail: string, name?: string) => {
+      const clean = String(rawEmail || "").trim().toLowerCase();
+      setRoundTableGoogleLoading(false);
+      if (!clean) {
+        toast({
+          duration: 5000,
+          title: "Sign-in failed",
+          description: "Couldn't read your Google email.",
+          variant: "destructive",
+        });
+        return;
+      }
+      resolveRoundTableAfterGoogle(clean, name);
+    };
+
+    const onMessage = (ev: MessageEvent) => {
+      const d = ev?.data;
+      if (!d || d.kind !== "eventsh:google-member" || handled) return;
+      handled = true;
+      accept(d.email || "", d.name);
+    };
+    window.addEventListener("message", onMessage);
+
+    const t = window.setInterval(() => {
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw && raw !== prev && !handled) {
+          handled = true;
+          window.clearInterval(t);
+          localStorage.removeItem(KEY);
+          const parsed = JSON.parse(raw);
+          accept(parsed?.email || "", parsed?.name);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      if (
+        roundTablePopupRef.current &&
+        roundTablePopupRef.current.closed &&
+        !handled
+      ) {
+        if (sawPopupClosed) {
+          window.clearInterval(t);
+          setRoundTableGoogleLoading(false);
+        } else {
+          sawPopupClosed = true;
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundTableGoogleLoading]);
 
   const handleScheduledSpaceFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -6436,8 +6526,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   // Open the round-table booking flow: jump to the Venue tab and reveal the
   // layout so the visitor can pick seats. Reused by the chatbot pill.
-  const openRoundTableBooking = () => {
-    if (!guardEventOpen("Round-table bookings")) return;
+  // Lands on the seat picker: Venue tab, map expanded, scrolled to the
+  // "Reserve Your Seats" block. Only reached once the visitor is signed in
+  // (see openRoundTableBooking / ensureRoundTableAuth).
+  const goToRoundTablePicker = () => {
     goToTab("venue", true);
     // The tab content mounts lazily; once it has, land on the seat picker
     // (map + table category cards) rather than the top of the tab.
@@ -6447,6 +6539,145 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         block: "start",
       });
     }, 250);
+  };
+
+  const openRoundTableBooking = () => {
+    if (!guardEventOpen("Round-table bookings")) return;
+    if (roundTableAuthedEmail) {
+      goToRoundTablePicker();
+      return;
+    }
+    setRoundTableGoogleLoading(false);
+    setShowRoundTableAuth(true);
+  };
+
+  // Seat/table clicks on the map and the category cards call this first:
+  // true = signed in, carry on; false = the sign-in dialog was opened and
+  // the click is swallowed until they come back verified.
+  const ensureRoundTableAuth = (): boolean => {
+    if (roundTableAuthedEmail) return true;
+    if (!guardEventOpen("Round-table bookings")) return false;
+    setRoundTableGoogleLoading(false);
+    setShowRoundTableAuth(true);
+    return false;
+  };
+
+  // Same popup + postMessage / localStorage handshake as the Scheduled
+  // Space and Rent-a-Stall flows.
+  const handleRoundTableGoogleLogin = () => {
+    const url = `${apiURL}/auth/google-member`;
+    const w = 480;
+    const h = 600;
+    const left =
+      typeof window !== "undefined"
+        ? window.screenX + (window.outerWidth - w) / 2
+        : 0;
+    const top =
+      typeof window !== "undefined"
+        ? window.screenY + (window.outerHeight - h) / 2
+        : 0;
+    const popup = window.open(
+      url,
+      "eventsh-google-member",
+      `width=${w},height=${h},left=${left},top=${top}`,
+    );
+    if (!popup) {
+      toast({
+        duration: 5000,
+        title: "Popup blocked",
+        description: "Allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    roundTablePopupRef.current = popup;
+    setRoundTableGoogleLoading(true);
+  };
+
+  // After Google: remember the verified identity, pre-fill the booking
+  // form (email locked), then show this email's existing bookings for the
+  // event if there are any — otherwise straight to the seat picker.
+  const resolveRoundTableAfterGoogle = async (email: string, name?: string) => {
+    setRoundTableAuthedEmail(email);
+    setRtVisitorInfo((p) => ({
+      ...p,
+      email,
+      name: p.name || name || "",
+    }));
+    let bookings: any[] = [];
+    try {
+      const res = await fetch(
+        `${apiURL}/round-table-bookings/check-request/${dbEventId}/${encodeURIComponent(email)}`,
+      );
+      const result = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(result?.bookings)) bookings = result.bookings;
+    } catch {
+      // No bookings (or a transient error) — the normal first-time case.
+    }
+    setShowRoundTableAuth(false);
+    if (bookings.length > 0) {
+      setRoundTableBookingList(bookings);
+      setShowRoundTableBookingList(true);
+      return;
+    }
+    goToRoundTablePicker();
+  };
+
+  const startNewRoundTableBooking = () => {
+    setShowRoundTableBookingList(false);
+    setRoundTableSelections([]);
+    goToRoundTablePicker();
+  };
+
+  // Ticket PDF for a Paid booking — same endpoint the payment page and
+  // the organizer's list use.
+  const handleDownloadRoundTableTicket = async (booking: any) => {
+    if (!booking?._id) return;
+    setDownloadingRtTicketId(String(booking._id));
+    try {
+      const response = await fetch(
+        `${apiURL}/round-table-bookings/download-ticket/${booking._id}`,
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || "Failed to download ticket");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `round_table_ticket_${(eventData as any)?.title || booking._id}.pdf`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({
+        duration: 5000,
+        title: "Couldn't download ticket",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingRtTicketId(null);
+    }
+  };
+
+  // A booking still awaiting payment can be finished from the chooser —
+  // same navigate() state the seat picker's "Proceed to Payment" sends.
+  const resumeRoundTablePayment = (booking: any) => {
+    setShowRoundTableBookingList(false);
+    navigate("/round-table-payment", {
+      state: {
+        bookings: [booking],
+        eventTitle: eventData?.title,
+        totalAmount: booking.amount || 0,
+        organizerId: eventData?.organizer?._id,
+      },
+    });
   };
 
   // ── "Add to Google Calendar" + "View on Google Maps" links for the
@@ -11082,6 +11313,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                                     const handleChairClick = (ci: number) => {
                                       if (isReference) return;
+                                      // Sign in with Google before picking seats — mirrors Scheduled Spaces.
+                                      if (!ensureRoundTableAuth()) return;
                                       if (bookedChairs.includes(ci)) return;
                                       if (rt.sellingMode === "table") {
                                         if (mySelection) {
@@ -11772,6 +12005,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   const isReference = rt.forSale === false;
                                   const handleChairClick = (ci: number) => {
                                     if (isReference) return;
+                                    // Sign in with Google before picking seats — mirrors Scheduled Spaces.
+                                    if (!ensureRoundTableAuth()) return;
                                     if (bookedChairs.includes(ci)) return;
                                     if (rt.sellingMode === "table") {
                                       if (mySelection) {
@@ -12159,19 +12394,27 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             </div>
                             <div>
                               <label className="text-[11px] font-medium text-gray-500 mb-1 block">
-                                Email *
+                                {roundTableAuthedEmail
+                                  ? "Email (verified with Google)"
+                                  : "Email *"}
                               </label>
                               <input
                                 type="email"
                                 placeholder="john@email.com"
                                 value={rtVisitorInfo.email}
+                                disabled={!!roundTableAuthedEmail}
+                                title={
+                                  roundTableAuthedEmail
+                                    ? "Verified via Google sign-in — can't be changed"
+                                    : undefined
+                                }
                                 onChange={(e) =>
                                   setRtVisitorInfo({
                                     ...rtVisitorInfo,
                                     email: e.target.value,
                                   })
                                 }
-                                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
+                                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-shadow disabled:bg-gray-50 disabled:text-gray-500"
                               />
                             </div>
                             <div>
@@ -14281,6 +14524,147 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         }
         primaryColor={design?.primaryColor || "#f97316"}
       />
+
+      {/* Round tables — Google sign-in gate before seats can be picked. */}
+      <Dialog open={showRoundTableAuth} onOpenChange={setShowRoundTableAuth}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Book a Seat / Table</DialogTitle>
+            <DialogDescription>Sign in with Google to continue.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {roundTableGoogleLoading ? (
+              <div className="py-6 text-center space-y-2">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                <p className="text-sm text-muted-foreground">Looking you up…</p>
+              </div>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleRoundTableGoogleLogin}
+                  className="w-full"
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Continue with Google
+                </Button>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  We use your email to verify your booking and find any seats
+                  or tables you've already booked — already booked? Signing in
+                  again takes you straight to your tickets.
+                </p>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Round tables — this email already has bookings for the event:
+          show them (ticket download when paid, finish payment when not) and
+          offer to book another. Mirrors the Scheduled Space chooser. */}
+      <Dialog
+        open={showRoundTableBookingList}
+        onOpenChange={setShowRoundTableBookingList}
+      >
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Your Seat / Table Bookings</DialogTitle>
+            <DialogDescription>
+              Booked as {roundTableAuthedEmail}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {roundTableBookingList.map((b: any) => {
+              const status = String(b.paymentStatus || "Pending");
+              const badge =
+                {
+                  Paid: "bg-emerald-100 text-emerald-700 border border-emerald-300",
+                  Submitted: "bg-amber-100 text-amber-700 border border-amber-300",
+                  Pending: "bg-gray-100 text-gray-700 border border-gray-300",
+                }[status] || "bg-gray-100 text-gray-700 border border-gray-300";
+              const label =
+                {
+                  Paid: "Confirmed",
+                  Submitted: "Payment under review",
+                  Pending: "Awaiting payment",
+                }[status] || status;
+              const seats =
+                b.sellingMode === "table" || b.isWholeTable
+                  ? `Entire table (${b.numberOfSeats} seats)`
+                  : `Chair(s): ${(b.selectedChairIndices || [])
+                      .map((c: number) => c + 1)
+                      .join(", ")}`;
+              return (
+                <div key={b._id} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">
+                      {b.tableName}
+                      {b.tableCategory ? ` · ${b.tableCategory}` : ""}
+                    </span>
+                    <Badge className={`text-xs ${badge}`}>{label}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {seats} · {formatPrice(b.amount || 0)}
+                    {b.createdAt
+                      ? ` · ${new Date(b.createdAt).toLocaleDateString()}`
+                      : ""}
+                  </p>
+                  {status === "Paid" && (
+                    <>
+                      <p className="text-xs text-emerald-700">
+                        Your check-in QR ticket was emailed to you — download a
+                        copy here and show it at the venue.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={downloadingRtTicketId === String(b._id)}
+                        onClick={() => handleDownloadRoundTableTicket(b)}
+                      >
+                        {downloadingRtTicketId === String(b._id) ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Downloading…
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-2" />
+                            Download Ticket
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                  {status === "Submitted" && (
+                    <p className="text-xs text-amber-700">
+                      Payment submitted — the organizer will confirm it and your
+                      QR ticket will be emailed to you.
+                    </p>
+                  )}
+                  {status === "Pending" && (
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => resumeRoundTablePayment(b)}
+                    >
+                      Complete Payment
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={startNewRoundTableBooking}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Book Another Seat / Table
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       {/* Scheduled Spaces — Google sign-in gate, then registration form. */}
       <Dialog
