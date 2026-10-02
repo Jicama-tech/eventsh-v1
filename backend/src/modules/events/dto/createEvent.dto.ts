@@ -527,6 +527,8 @@ export class RoundTableTemplateDto {
   @IsString() @IsOptional() color?: string;
   @IsNumber() @IsOptional() tableDiameter?: number;
   @IsBoolean() @IsOptional() forSale?: boolean;
+  // true = organizer allots the table/chairs; visitors only request seats.
+  @IsBoolean() @IsOptional() organizerAllots?: boolean;
 }
 
 // Positioned round tables on venue canvas
@@ -548,6 +550,7 @@ export class PositionedRoundTableDto {
   @IsString() @IsOptional() color?: string;
   @IsNumber() @IsOptional() tableDiameter?: number;
   @IsBoolean() @IsOptional() forSale?: boolean;
+  @IsBoolean() @IsOptional() organizerAllots?: boolean;
   @IsNumber() x: number;
   @IsNumber() y: number;
   @IsNumber() @IsOptional() rotation?: number;

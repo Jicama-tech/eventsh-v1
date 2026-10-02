@@ -304,6 +304,11 @@ class RoundTableTemplate {
   // A "not for sale" table is a layout reference only (e.g. a standing
   // cocktail table / decoration) and cannot be booked.
   @Prop({ default: true }) forSale: boolean;
+  // Seat selection. false (default) = the visitor picks their own chairs /
+  // table on the venue map. true = "Organizer Allots": the visitor only
+  // requests seats (or a table) of this type and the organizer assigns the
+  // actual table and chairs from the dashboard before confirming payment.
+  @Prop({ default: false }) organizerAllots: boolean;
 }
 
 class PositionedRoundTable {
@@ -324,6 +329,9 @@ class PositionedRoundTable {
   @Prop({ default: "#8B5CF6" }) color: string;
   @Prop({ default: 120 }) tableDiameter: number;
   @Prop({ default: true }) forSale: boolean;
+  // Snapshot of the template's flag at placement time; readers consult the
+  // template too (see RoundTableBookingsService.isOrganizerAllotted).
+  @Prop({ default: false }) organizerAllots: boolean;
   @Prop() x: number;
   @Prop() y: number;
   @Prop({ default: 0 }) rotation: number;

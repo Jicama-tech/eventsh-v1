@@ -35,6 +35,13 @@ const RoundTableBookings = ({
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Allotment dialog — for bookings whose template is "Organizer Allots":
+  // pick a table (and, per-chair, the exact chairs) for the visitor.
+  const [allotFor, setAllotFor] = useState<any>(null);
+  const [allotTables, setAllotTables] = useState<any[]>([]);
+  const [allotTableId, setAllotTableId] = useState<string>("");
+  const [allotChairs, setAllotChairs] = useState<number[]>([]);
+  const [allotting, setAllotting] = useState(false);
   // Round-tables tab filters (search + payment status).
   const [rtSearch, setRtSearch] = useState("");
   const [rtPaymentFilter, setRtPaymentFilter] = useState("all");
@@ -42,6 +49,72 @@ const RoundTableBookings = ({
   const apiURL = __API_URL__;
   const { country } = useCountry();
   const { formatPrice } = useCurrency(country);
+
+  const openAllot = async (booking: any) => {
+    setAllotFor(booking);
+    setAllotTableId("");
+    setAllotChairs([]);
+    try {
+      const res = await fetch(
+        `${apiURL}/round-table-bookings/available/${eventId}`,
+      );
+      const result = await res.json().catch(() => null);
+      setAllotTables(Array.isArray(result?.data?.roundTables) ? result.data.roundTables : []);
+    } catch {
+      setAllotTables([]);
+    }
+  };
+
+  // Chairs already promised on a table: booked on the event (Paid) plus
+  // chairs allotted to any other live booking — mirrors the server check.
+  const heldChairs = (table: any): Set<number> => {
+    const held = new Set<number>(table?.bookedChairs || []);
+    const cap = Number(table?.numberOfChairs) || 0;
+    for (const b of bookings) {
+      if (!allotFor || b._id === allotFor._id) continue;
+      if (b.tablePositionId !== table?.positionId) continue;
+      if (["Failed", "Refunded"].includes(b.paymentStatus)) continue;
+      for (const c of b.selectedChairIndices || []) held.add(c);
+      if (b.isWholeTable) for (let i = 0; i < cap; i++) held.add(i);
+    }
+    return held;
+  };
+
+  const submitAllot = async () => {
+    if (!allotFor || !allotTableId) return;
+    setAllotting(true);
+    try {
+      const res = await fetch(
+        `${apiURL}/round-table-bookings/${allotFor._id}/allot`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tablePositionId: allotTableId,
+            selectedChairIndices:
+              allotFor.sellingMode === "chair" ? allotChairs : undefined,
+          }),
+        },
+      );
+      const result = await res.json().catch(() => null);
+      if (!res.ok || !result?.success) {
+        throw new Error(result?.message || "Could not allot seats");
+      }
+      setBookings((prev) =>
+        prev.map((b) => (b._id === allotFor._id ? { ...b, ...result.data } : b)),
+      );
+      toast({ title: "Seats allotted", description: result.message });
+      setAllotFor(null);
+    } catch (err: any) {
+      toast({
+        title: "Couldn't allot seats",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAllotting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchBookings = async () => {
@@ -278,10 +351,19 @@ const RoundTableBookings = ({
                       </p>
                     </td>
                     <td className="py-3 pr-4">
-                      <p className="font-medium">{booking.tableName}</p>
+                      <p className="font-medium">
+                        {booking.allotmentPending
+                          ? "To be allotted"
+                          : booking.tableName}
+                      </p>
                       <Badge variant="secondary" className="text-[10px] mt-0.5">
                         {booking.tableCategory}
                       </Badge>
+                      {booking.allotmentPending && (
+                        <Badge className="text-[10px] mt-0.5 ml-1 bg-amber-100 text-amber-700 border border-amber-300">
+                          Allot seats
+                        </Badge>
+                      )}
                     </td>
                     <td className="py-3 pr-4">
                       <p>
@@ -321,7 +403,26 @@ const RoundTableBookings = ({
                       )}
                     </td>
                     <td className="py-3 pr-4">
-                      {booking.paymentStatus === "Submitted" && (
+                      {booking.allotmentPending &&
+                        ["Pending", "Submitted"].includes(
+                          booking.paymentStatus,
+                        ) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-amber-400 text-amber-700 hover:bg-amber-50 mr-1"
+                            onClick={() => openAllot(booking)}
+                          >
+                            Allot seats
+                          </Button>
+                        )}
+                      {booking.paymentStatus === "Submitted" &&
+                        booking.allotmentPending && (
+                          <p className="text-[10px] text-amber-700 mt-1">
+                            Allot seats before confirming
+                          </p>
+                        )}
+                      {booking.paymentStatus === "Submitted" && !booking.allotmentPending && (
                         <Button
                           size="sm"
                           className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
@@ -335,7 +436,7 @@ const RoundTableBookings = ({
                           )}
                         </Button>
                       )}
-                      {booking.paymentStatus === "Pending" && (
+                      {booking.paymentStatus === "Pending" && !booking.allotmentPending && (
                         <span className="text-xs text-muted-foreground">Awaiting payment</span>
                       )}
                       {booking.paymentStatus === "Paid" && (
@@ -380,6 +481,131 @@ const RoundTableBookings = ({
           </div>
         </CardContent>
       </Card>
+      {/* Allot dialog — assign a table (+ chairs) to an organizer-allotted
+          booking. Same-category tables are listed first; tables sold in the
+          other mode are hidden since the visitor paid per this mode. */}
+      <Dialog open={!!allotFor} onOpenChange={(open) => !open && setAllotFor(null)}>
+        {allotFor && (
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-base">{t("Allot Seats")}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {allotFor.visitorName} · {allotFor.tableCategory} ·{" "}
+                {allotFor.sellingMode === "table"
+                  ? "whole table"
+                  : `${allotFor.numberOfSeats} seat(s)`}{" "}
+                · {formatPrice(allotFor.amount)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {(() => {
+                const mode = allotFor.sellingMode === "table" ? "table" : "chair";
+                const candidates = allotTables
+                  .filter((tb: any) => tb.forSale !== false)
+                  .filter((tb: any) => (tb.sellingMode === "table" ? "table" : "chair") === mode)
+                  .sort((a: any, b: any) => {
+                    const ac = (a.category || "Standard") === allotFor.tableCategory ? 0 : 1;
+                    const bc = (b.category || "Standard") === allotFor.tableCategory ? 0 : 1;
+                    return ac - bc;
+                  });
+                if (candidates.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      No {mode === "table" ? "whole-table" : "per-chair"} tables are placed on the venue layout yet.
+                    </p>
+                  );
+                }
+                const chosen = candidates.find((tb: any) => tb.positionId === allotTableId);
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {candidates.map((tb: any) => {
+                        const cap = Number(tb.numberOfChairs) || 0;
+                        const held = heldChairs(tb);
+                        const free = Math.max(0, cap - held.size);
+                        const usable =
+                          mode === "table" ? held.size === 0 && !tb.isFullyBooked : free >= allotFor.numberOfSeats;
+                        const active = allotTableId === tb.positionId;
+                        return (
+                          <button
+                            key={tb.positionId}
+                            type="button"
+                            disabled={!usable}
+                            onClick={() => {
+                              setAllotTableId(tb.positionId);
+                              setAllotChairs([]);
+                            }}
+                            className={`text-left rounded-lg border p-2.5 text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                              active ? "border-purple-500 bg-purple-50 dark:bg-purple-500/10" : "hover:bg-muted"
+                            }`}
+                          >
+                            <p className="font-semibold text-foreground flex items-center gap-1.5">
+                              <Circle size={10} style={{ color: tb.color || "#8B5CF6", fill: tb.color || "#8B5CF6" }} />
+                              {tb.name}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {tb.category || "Standard"} · {free}/{cap} free
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {chosen && mode === "chair" && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Pick {allotFor.numberOfSeats} chair(s) on {chosen.name} ({allotChairs.length}/{allotFor.numberOfSeats})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.from({ length: Number(chosen.numberOfChairs) || 0 }).map((_, i) => {
+                            const taken = heldChairs(chosen).has(i);
+                            const on = allotChairs.includes(i);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                disabled={taken || (!on && allotChairs.length >= allotFor.numberOfSeats)}
+                                onClick={() =>
+                                  setAllotChairs((prev) =>
+                                    on ? prev.filter((c) => c !== i) : [...prev, i].sort((a, b) => a - b),
+                                  )
+                                }
+                                className={`w-8 h-8 rounded-full text-xs font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                  on ? "bg-purple-600 text-white border-purple-700" : "bg-background hover:bg-muted"
+                                }`}
+                                title={taken ? `Seat ${i + 1} — taken` : `Seat ${i + 1}`}
+                              >
+                                {i + 1}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <Button
+                      className="w-full"
+                      disabled={
+                        allotting ||
+                        !allotTableId ||
+                        (mode === "chair" && allotChairs.length !== allotFor.numberOfSeats)
+                      }
+                      onClick={submitAllot}
+                    >
+                      {allotting ? (
+                        <>
+                          <Loader2 size={14} className="mr-2 animate-spin" /> Allotting…
+                        </>
+                      ) : (
+                        "Allot to this booking"
+                      )}
+                    </Button>
+                  </>
+                );
+              })()}
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
+
       {/* Detail Dialog — Radix-based so it nests cleanly inside other dialogs
           (the Participants > Round Tables tab opens this from inside another
           Dialog, and a hand-rolled fixed overlay clashed with the parent's

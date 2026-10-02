@@ -84,6 +84,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "../ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { computeMemberSplit } from "@/lib/memberSplit";
 import { toast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import {
@@ -2242,7 +2249,30 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // Excel. Includes the full shopkeeper profile, selected spaces, add-ons,
   // amounts, payment ID and the derived status — images are intentionally
   // excluded.
-  const exportStallsToCSV = () => {
+  const exportStallsToCSV = (audience: "all" | "member" | "non-member" = "all") => {
+    // Member = booked at the member rate (same rule as the analytics split),
+    // falling back to the vendor's current membership flag.
+    const memberIds =
+      computeMemberSplit(selectedEvent, sortedStalls, () => true)
+        ?.memberStallIds ?? null;
+    const isMemberStall = (s: any) =>
+      memberIds && memberIds.has(String(s._id))
+        ? true
+        : !!s?.shopkeeperId?.isMember;
+    const exportStalls = sortedStalls.filter((s: any) =>
+      audience === "all"
+        ? true
+        : audience === "member"
+          ? isMemberStall(s)
+          : !isMemberStall(s),
+    );
+    if (exportStalls.length === 0) {
+      toast({
+        title: "Nothing to export",
+        description: `No ${audience === "member" ? "member" : "non-member"} exhibitors in the current list.`,
+      });
+      return;
+    }
     // Mirrors the "Shopkeeper Information" shown in the stall detail dialog
     // (no images / address fields), plus Refund Payment Description, and the
     // booking specifics (spaces, add-ons, amounts, payment ID, status).
@@ -2278,7 +2308,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       "Last Updated",
     ];
     const rows: (string | number)[][] = [header];
-    sortedStalls.forEach((s: any, idx: number) => {
+    exportStalls.forEach((s: any, idx: number) => {
       const v =
         s.shopkeeperId && typeof s.shopkeeperId === "object"
           ? s.shopkeeperId
@@ -2367,7 +2397,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       "_",
     );
     link.href = url;
-    link.download = `${evtName}_Exhibitors_${
+    link.download = `${evtName}_Exhibitors${
+      audience === "all" ? "" : audience === "member" ? "_Members" : "_NonMembers"
+    }_${
       new Date().toISOString().split("T")[0]
     }.csv`;
     document.body.appendChild(link);
@@ -3259,16 +3291,30 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                               Showing {filteredStalls.length} of {stalls.length}
                             </span>
                             {canExports && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={exportStallsToCSV}
-                              disabled={filteredStalls.length === 0}
-                              title="Export the exhibitor list (details, spaces, add-ons, payment ID) to Excel"
-                            >
-                              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
-                              Export to Excel
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={filteredStalls.length === 0}
+                                  title="Export the exhibitor list (details, spaces, add-ons, payment ID) to Excel"
+                                >
+                                  <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                                  Export to Excel
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => exportStallsToCSV("member")}>
+                                  Members
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => exportStallsToCSV("non-member")}>
+                                  Non-Members
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => exportStallsToCSV("all")}>
+                                  All
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             )}
                             <Button
                               size="sm"
