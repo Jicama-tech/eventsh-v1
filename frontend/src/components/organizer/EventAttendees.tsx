@@ -2259,7 +2259,12 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       memberIds && memberIds.has(String(s._id))
         ? true
         : !!s?.shopkeeperId?.isMember;
-    const exportStalls = sortedStalls.filter((s: any) =>
+    // Cancelled stalls (incl. timer-expired and manually deleted ones, which
+    // are stored as Cancelled) stay in the on-screen list for refunds but
+    // never belong in the export.
+    const exportStalls = sortedStalls
+      .filter((s: any) => s?.status !== "Cancelled" && !s?.isDeleted)
+      .filter((s: any) =>
       audience === "all"
         ? true
         : audience === "member"
@@ -2269,7 +2274,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
     if (exportStalls.length === 0) {
       toast({
         title: "Nothing to export",
-        description: `No ${audience === "member" ? "member" : "non-member"} exhibitors in the current list.`,
+        description: `No ${audience === "all" ? "" : audience === "member" ? "member " : "non-member "}exhibitors to export (cancelled/deleted are excluded).`,
       });
       return;
     }
