@@ -479,6 +479,22 @@ export class EventsService {
       });
     }
 
+    // Scheduled spaces: each template's bookable slots carry a calendar date
+    // ("YYYY-MM-DD"); shift them with the event so they stay in the future.
+    if (Array.isArray(doc.scheduledSpaceTemplates)) {
+      doc.scheduledSpaceTemplates = doc.scheduledSpaceTemplates.map((t: any) => ({
+        ...t,
+        slots: Array.isArray(t?.slots)
+          ? t.slots.map((s: any) => {
+              const d = s?.date ? Date.parse(s.date) : NaN;
+              return isNaN(d)
+                ? s
+                : { ...s, date: new Date(d + shift).toISOString().slice(0, 10) };
+            })
+          : t?.slots,
+      }));
+    }
+
     // Organizer identity → demo identity.
     doc.organizer = String(organizer);
     doc.volunteers = [];
