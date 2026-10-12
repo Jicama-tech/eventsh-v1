@@ -8,6 +8,8 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { JwtService } from "@nestjs/jwt";
+import * as fs from "fs";
+import * as path from "path";
 import { OAuth2Client } from "google-auth-library";
 import { Event, EventDocument } from "./schemas/event.schema";
 import { CreateEventDto } from "./dto/createEvent.dto";
@@ -342,6 +344,221 @@ export class EventsService {
       .lean()
       .exec();
     return events || [];
+  }
+
+  // Admin: every real event on the platform (all organizers) so the admin can
+  // pick one to copy as a landing-page demo. Excludes events that are already
+  // showcase/demo copies. Light fields only + the owning organizer's name.
+  async listPlatformEvents(search?: string): Promise<any[]> {
+    const filter: any = { isShowcase: { $ne: true } };
+    if (search && search.trim()) {
+      const safe = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.title = { $regex: safe, $options: "i" };
+    }
+    const events: any[] = await this.eventModel
+      .find(filter)
+      .select(
+        "title eventType category startDate endDate image organizer status published createdAt",
+      )
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean()
+      .exec();
+
+    const orgIds = Array.from(
+      new Set(events.map((e) => String(e.organizer || "")).filter(Boolean)),
+    )
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    const orgs: any[] = orgIds.length
+      ? await this.eventModel.db
+          .collection("organizers")
+          .find({ _id: { $in: orgIds } })
+          .project({ organizationName: 1, name: 1, email: 1 })
+          .toArray()
+      : [];
+    const orgById = new Map(orgs.map((o) => [String(o._id), o]));
+
+    return events.map((e) => {
+      const o = orgById.get(String(e.organizer || ""));
+      return {
+        _id: e._id,
+        title: e.title,
+        eventType: e.eventType,
+        category: e.category,
+        startDate: e.startDate,
+        image: e.image,
+        status: e.status,
+        published: e.published,
+        organizerName: o?.organizationName || o?.name || "Unknown organizer",
+        organizerEmail: o?.email || "",
+      };
+    });
+  }
+
+  // Admin: copy a real event into a landing-page demo. The copy is re-homed
+  // under the demo organization, stripped of everything that identifies the
+  // original organizer / its customers (contacts, links, volunteers, bookings,
+  // sold-seat state, slug) and its uploaded images are duplicated so deleting
+  // the source event can't break the demo. Dates are shifted into the future so
+  // the demo always looks live. Bookings, tickets and other customer records
+  // are NOT copied.
+  async cloneAsShowcase(
+    sourceId: string,
+    opts: { kind?: string; fallbackOrganizerId?: string },
+  ): Promise<any> {
+    if (!Types.ObjectId.isValid(sourceId)) {
+      throw new BadRequestException("Invalid event id");
+    }
+    const src: any = await this.eventModel.findById(sourceId).lean().exec();
+    if (!src) throw new NotFoundException("Event not found");
+
+    const isPersonal =
+      src.eventType === "personal" || src.category === "Marriage Function";
+    const kind =
+      opts.kind === "personal" || opts.kind === "professional"
+        ? opts.kind
+        : isPersonal
+          ? "personal"
+          : "professional";
+
+    // Demo organizer: same-kind demo's org first, then any demo's, then the
+    // caller-supplied fallback (env-configured demo org).
+    const sameKind: any = await this.eventModel
+      .findOne({ isShowcase: true, showcaseKind: kind })
+      .select("organizer")
+      .lean();
+    const anyDemo: any = sameKind
+      ? null
+      : await this.eventModel
+          .findOne({ isShowcase: true })
+          .select("organizer")
+          .lean();
+    const organizer =
+      sameKind?.organizer || anyDemo?.organizer || opts.fallbackOrganizerId;
+    if (!organizer) {
+      throw new BadRequestException("No demo organization is configured");
+    }
+
+    // Deep copy with uploaded images duplicated (see copyUpload).
+    const stamp = Date.now().toString(36);
+    let n = 0;
+    const walk = (v: any): any => {
+      if (typeof v === "string") return this.copyUpload(v, `${stamp}${n++}`);
+      if (Array.isArray(v)) return v.map(walk);
+      if (v instanceof Date) return new Date(v);
+      if (v && typeof v === "object") {
+        if (typeof v.toHexString === "function") return v;
+        const out: any = {};
+        for (const k of Object.keys(v)) out[k] = walk(v[k]);
+        return out;
+      }
+      return v;
+    };
+    const { _id, __v, createdAt, updatedAt, slug, inviteLink, ...rest } = src;
+    const doc: any = walk(rest);
+
+    // Shift the schedule so the demo starts ~30 days from now.
+    const day = 86400000;
+    const start = src.startDate ? new Date(src.startDate).getTime() : Date.now();
+    const shift = Math.round((Date.now() + 30 * day - start) / day) * day;
+    if (src.startDate) doc.startDate = new Date(start + shift);
+    if (src.endDate)
+      doc.endDate = new Date(new Date(src.endDate).getTime() + shift);
+    if (Array.isArray(doc.functions)) {
+      doc.functions = doc.functions.map((f: any) => {
+        const t = f?.date ? Date.parse(f.date) : NaN;
+        return isNaN(t)
+          ? { ...f, isLive: false, announcedAt: undefined }
+          : {
+              ...f,
+              date: new Date(t + shift).toISOString().slice(0, 10),
+              isLive: false,
+              announcedAt: undefined,
+            };
+      });
+    }
+
+    // Organizer identity → demo identity.
+    doc.organizer = String(organizer);
+    doc.volunteers = [];
+    doc.socialMedia = { facebook: "", instagram: "", twitter: "", linkedin: "" };
+    doc.reelLinks = [];
+    if (doc.adBar) doc.adBar = { ...doc.adBar, visible: false, message: "" };
+    if (doc.marriage) {
+      doc.marriage = {
+        ...doc.marriage,
+        partner1Name: "Aarav",
+        partner2Name: "Diya",
+        invitationTitle: "",
+        hostNames: "",
+        contactName: "Eventsh Demo",
+        contactPhone: "",
+        contactEmail: "",
+      };
+    }
+
+    // Reset live booking / sold state so the demo shows a fresh, open event.
+    const unbook = (arr: any) =>
+      Array.isArray(arr)
+        ? arr.map((t: any) => {
+            const { bookedBy, ...r } = t || {};
+            return { ...r, isBooked: false };
+          })
+        : arr;
+    doc.tableTemplates = unbook(doc.tableTemplates);
+    doc.venueTables = unbook(doc.venueTables);
+    if (Array.isArray(doc.venueRoundTables))
+      doc.venueRoundTables = doc.venueRoundTables.map((t: any) => ({
+        ...t,
+        bookedChairs: [],
+        isFullyBooked: false,
+      }));
+    if (Array.isArray(doc.workshopSessions))
+      doc.workshopSessions = doc.workshopSessions.map((w: any) => ({
+        ...w,
+        bookedSeats: 0,
+      }));
+    doc.seatMapBookedSeats = [];
+    doc.scheduledSpaceBookedSlots = [];
+    if (doc.originalTotalTickets != null)
+      doc.totalTickets = doc.originalTotalTickets;
+
+    // Demo / showcase flags.
+    doc.isShowcase = true;
+    doc.isDemo = true;
+    doc.showcaseKind = kind;
+    doc.showcaseMode = "eventfront";
+    doc.showcaseOrder = 0;
+    doc.showcaseBlurb = "";
+    doc.published = true;
+    doc.visibility = "public";
+    doc.status = "published";
+
+    const created = await this.eventModel.create(doc);
+    return created.toObject();
+  }
+
+  // Duplicate an uploaded file (/uploads/...) under a new name and return the
+  // new reference, preserving whether it was a relative path or a full URL.
+  // Non-upload strings (and files that can't be copied) pass through unchanged.
+  private copyUpload(value: string, tag: string): string {
+    const m = /^(https?:\/\/[^/]+)?(\/uploads\/[^?#]+)$/.exec(value);
+    if (!m) return value;
+    try {
+      const rel = m[2].replace(/^\//, "");
+      const from = path.resolve(process.cwd(), rel);
+      const uploadsRoot = path.resolve(process.cwd(), "uploads") + path.sep;
+      if (!from.startsWith(uploadsRoot) || !fs.existsSync(from)) return value;
+      const ext = path.extname(from);
+      const base = path.basename(from, ext);
+      const toName = `demo-${tag}-${base}${ext}`;
+      fs.copyFileSync(from, path.join(path.dirname(from), toName));
+      const dir = m[2].slice(0, m[2].lastIndexOf("/") + 1);
+      return `${m[1] || ""}${dir}${toName}`;
+    } catch {
+      return value;
+    }
   }
 
   async create(createEventDto: CreateEventDto): Promise<Event> {
