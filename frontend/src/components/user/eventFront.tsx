@@ -680,6 +680,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // (and the multi-layout selector / stats grid) only render after the
   // user explicitly opts in by clicking the chevron header.
   const [showVenueLayout, setShowVenueLayout] = useState(false);
+  // Demo events (landing-page showcase) open the venue map straight away — no
+  // click needed — so visitors see the layout and spaces immediately.
+  const isDemoEvent = !!(eventData as any)?.isDemo;
+  useEffect(() => {
+    if (isDemoEvent) setShowVenueLayout(true);
+  }, [isDemoEvent]);
   const [venueMaximized, setVenueMaximized] = useState(false);
   // Controlled active tab so the info cards can jump to a section, and a ref
   // to the tabs block so we can scroll it into view on card click.
