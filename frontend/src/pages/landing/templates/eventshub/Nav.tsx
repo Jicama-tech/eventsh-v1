@@ -25,17 +25,10 @@ export function Nav({ isOpen, setIsOpen, onShowLogin }: NavSectionProps) {
         <div className="eh-nav-cta">
           <button
             type="button"
-            className="eh-btn eh-btn-g eh-btn-sm"
-            onClick={onShowLogin}
-          >
-            Login
-          </button>
-          <button
-            type="button"
             className="eh-btn eh-btn-p eh-btn-sm"
             onClick={onShowLogin}
           >
-            Get Started
+            Login
           </button>
           <button
             type="button"

@@ -25,17 +25,10 @@ export function Nav({ isOpen, setIsOpen, onShowLogin }: NavSectionProps) {
         <div className="navright">
           <button
             type="button"
-            className="btn btn-sm"
-            onClick={onShowLogin}
-          >
-            Login
-          </button>
-          <button
-            type="button"
             className="btn btn-primary btn-sm"
             onClick={onShowLogin}
           >
-            Get Started
+            Login
           </button>
           <button
             type="button"
@@ -69,23 +62,13 @@ export function Nav({ isOpen, setIsOpen, onShowLogin }: NavSectionProps) {
               </Link>
               <button
                 type="button"
-                className="btn"
-                onClick={() => {
-                  setIsOpen(false);
-                  onShowLogin();
-                }}
-              >
-                Login
-              </button>
-              <button
-                type="button"
                 className="btn btn-primary"
                 onClick={() => {
                   setIsOpen(false);
                   onShowLogin();
                 }}
               >
-                Get Started
+                Login
               </button>
             </div>
           </motion.div>
