@@ -131,7 +131,7 @@ export function Hero({ onShowLogin }: HeroSectionProps) {
               className="btn btn-primary"
               onClick={onShowLogin}
             >
-              Start free
+              Get Started
             </button>
             <a href="#screens" className="btn btn-ghost">
               See it working

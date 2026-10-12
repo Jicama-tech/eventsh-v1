@@ -25,10 +25,17 @@ export function Nav({ isOpen, setIsOpen, onShowLogin }: NavSectionProps) {
         <div className="eh-nav-cta">
           <button
             type="button"
+            className="eh-btn eh-btn-g eh-btn-sm"
+            onClick={onShowLogin}
+          >
+            Login
+          </button>
+          <button
+            type="button"
             className="eh-btn eh-btn-p eh-btn-sm"
             onClick={onShowLogin}
           >
-            Start free
+            Get Started
           </button>
           <button
             type="button"
@@ -60,6 +67,16 @@ export function Nav({ isOpen, setIsOpen, onShowLogin }: NavSectionProps) {
               <Link to="/contact" onClick={() => setIsOpen(false)}>
                 Contact
               </Link>
+              <a
+                href="/organizer/login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setIsOpen(false);
+                  onShowLogin();
+                }}
+              >
+                Login
+              </a>
             </div>
           </motion.div>
         )}

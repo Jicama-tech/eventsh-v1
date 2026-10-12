@@ -28,7 +28,7 @@ export function CTA({ onShowLogin, onContactUs }: CTASectionProps) {
             className="btn btn-primary"
             onClick={onShowLogin}
           >
-            Start free
+            Get Started
           </button>
           <button type="button" className="btn btn-ghost" onClick={onContactUs}>
             Talk to a human

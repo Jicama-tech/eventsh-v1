@@ -385,7 +385,7 @@ const Events = () => {
               </ul>
 
               <Button variant="event" size="lg" className="w-full">
-                Start Free
+                Get Started
               </Button>
             </div>
 

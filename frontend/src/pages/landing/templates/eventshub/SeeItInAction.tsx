@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { ScrollReveal } from "../shared/ScrollReveal";
 import { SeeItInActionSectionProps, ShowcaseEvent } from "../types";
@@ -213,17 +214,10 @@ export function SeeItInAction({
 
       {/* Full-bleed: the carousel runs past the wrap so cards enter and leave
           at the window edge instead of popping at a container boundary. */}
-      <div
-        className="eh-marquee"
-        style={{ ["--eh-track" as string]: `${cards.length * 26}s` }}
-      >
-        <div className="eh-track">
-          <div className="eh-track-half">{track(false)}</div>
-          <div className="eh-track-half" aria-hidden="true">
-            {track(true)}
-          </div>
-        </div>
-      </div>
+      <DemoCarousel
+        first={track(false)}
+        second={track(true)}
+      />
 
       <div className="eh-wrap">
         <ScrollReveal>
@@ -231,6 +225,109 @@ export function SeeItInAction({
         </ScrollReveal>
       </div>
     </section>
+  );
+}
+
+// Auto-drifting carousel with left / right chevrons. The two halves are
+// identical, so wrapping the offset by one half's width is seamless. Drift
+// pauses while the pointer or focus is inside; a chevron eases the row by one
+// card in either direction and the drift then carries on.
+const DRIFT_PX_PER_SEC = 14;
+
+function DemoCarousel({
+  first,
+  second,
+}: {
+  first: React.ReactNode;
+  second: React.ReactNode;
+}) {
+  const marqueeRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const halfRef = useRef<HTMLDivElement>(null);
+  const pos = useRef(0);
+  const target = useRef(0);
+  const paused = useRef(false);
+  const reduced = useRef(false);
+
+  useEffect(() => {
+    reduced.current = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduced.current) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(now - last, 64) / 1000;
+      last = now;
+      const half = halfRef.current?.offsetWidth || 0;
+      if (half > 0 && trackRef.current) {
+        if (Math.abs(target.current - pos.current) > 0.5) {
+          pos.current += (target.current - pos.current) * Math.min(1, dt * 8);
+        } else if (!paused.current) {
+          pos.current += DRIFT_PX_PER_SEC * dt;
+          target.current = pos.current;
+        }
+        if (pos.current >= half) {
+          pos.current -= half;
+          target.current -= half;
+        } else if (pos.current < 0) {
+          pos.current += half;
+          target.current += half;
+        }
+        trackRef.current.style.transform = `translate3d(${-pos.current}px,0,0)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const move = (dir: 1 | -1) => {
+    const card = halfRef.current?.querySelector<HTMLElement>(".eh-box");
+    const step = (card?.offsetWidth || 340) + 18;
+    if (reduced.current) {
+      marqueeRef.current?.scrollBy({ left: dir * step, behavior: "smooth" });
+      return;
+    }
+    target.current = target.current + dir * step;
+  };
+
+  return (
+    <div className="eh-carousel">
+      <button
+        type="button"
+        className="eh-car-btn left"
+        aria-label="Previous events"
+        onClick={() => move(-1)}
+      >
+        <ChevronLeft size={22} />
+      </button>
+      <div
+        ref={marqueeRef}
+        className="eh-marquee"
+        onMouseEnter={() => (paused.current = true)}
+        onMouseLeave={() => (paused.current = false)}
+        onFocus={() => (paused.current = true)}
+        onBlur={() => (paused.current = false)}
+      >
+        <div ref={trackRef} className="eh-track">
+          <div ref={halfRef} className="eh-track-half">
+            {first}
+          </div>
+          <div className="eh-track-half" aria-hidden="true">
+            {second}
+          </div>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="eh-car-btn right"
+        aria-label="Next events"
+        onClick={() => move(1)}
+      >
+        <ChevronRight size={22} />
+      </button>
+    </div>
   );
 }
 
@@ -325,7 +422,7 @@ function StartBar() {
         <strong>Your event</strong>
         <span>Pick a type, share the link, take bookings. About an hour.</span>
       </span>
-      <span className="eh-startgo">Start free →</span>
+      <span className="eh-startgo">Get Started →</span>
     </button>
   );
 }

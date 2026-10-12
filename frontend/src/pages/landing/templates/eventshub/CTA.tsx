@@ -23,7 +23,7 @@ export function CTA({ onShowLogin, onContactUs }: CTASectionProps) {
               className="eh-btn eh-btn-p eh-btn-lg"
               onClick={onShowLogin}
             >
-              Start free
+              Get Started
             </button>
             <button
               type="button"
