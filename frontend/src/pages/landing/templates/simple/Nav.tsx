@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { NavSectionProps } from "../types";
 
 /**
- * The whole nav: brand, login, get started. No section links — the page has
+ * The whole nav: brand, login. No section links — the page has
  * no sections to jump to. Features and pricing live in the footer, one click
  * away for the buyer who wants depth.
  */
@@ -16,11 +16,8 @@ export function Nav({ onShowLogin }: NavSectionProps) {
           Eventsh
         </Link>
         <div className="right">
-          <button type="button" className="sp-btn sp-btn-g" onClick={onShowLogin}>
-            Login
-          </button>
           <button type="button" className="sp-btn sp-btn-p" onClick={onShowLogin}>
-            Get Started
+            Login
           </button>
         </div>
       </div>

@@ -49,7 +49,7 @@ export function Nav({ isOpen, setIsOpen, currentPath, onShowLogin }: NavSectionP
                 onClick={onShowLogin}
                 className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_rgba(var(--primary),0.3)] hover:shadow-[0_0_25px_rgba(var(--primary),0.5)] transition-all duration-300"
               >
-                Get Started
+                Login
               </Button>
             </motion.div>
           </div>
@@ -95,7 +95,7 @@ export function Nav({ isOpen, setIsOpen, currentPath, onShowLogin }: NavSectionP
                 }}
                 className="w-full bg-primary hover:bg-primary/90"
               >
-                Get Started
+                Login
               </Button>
             </div>
           </motion.div>
