@@ -15,7 +15,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, ExternalLink, Sparkles, Pencil } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  ExternalLink,
+  Sparkles,
+  Pencil,
+  Copy,
+  Search,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CreateEventForm } from "@/components/organizer/CreateEventForm";
 import { MarriageEventForm } from "@/components/organizer/MarriageEventForm";
 
@@ -40,6 +55,13 @@ export function ShowcaseEventsPage() {
     kind: "professional" | "personal";
     data: any;
   }>(null);
+
+  // "Copy from platform" picker: every real event across all organizers.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [platformEvents, setPlatformEvents] = useState<any[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [copyingId, setCopyingId] = useState<string | null>(null);
 
   const token = () => sessionStorage.getItem("token") || "";
   // Assign each demo to the organizer of an existing demo of the SAME kind, so
@@ -70,6 +92,67 @@ export function ShowcaseEventsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadPlatformEvents = useCallback(async () => {
+    setPickerLoading(true);
+    try {
+      const r = await fetch(`${apiURL}/events/showcase/platform-events`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token") || ""}` },
+      });
+      if (!r.ok) throw new Error();
+      const j = await r.json();
+      setPlatformEvents(Array.isArray(j?.data) ? j.data : []);
+    } catch {
+      setPlatformEvents([]);
+      toast({ title: "Couldn't load platform events", variant: "destructive" });
+    } finally {
+      setPickerLoading(false);
+    }
+  }, [toast]);
+
+  const openPicker = () => {
+    setPickerOpen(true);
+    loadPlatformEvents();
+  };
+
+  // Copy the chosen event as a demo. The server strips organizer details and
+  // re-homes it under the demo organization; it then shows up in the list
+  // below, where it can be edited like any other demo.
+  const copyAsDemo = async (ev: any) => {
+    setCopyingId(ev._id);
+    try {
+      const res = await fetch(`${apiURL}/events/showcase/clone/${ev._id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token()}`,
+        },
+        body: JSON.stringify({ fallbackOrganizerId: ENV_DEMO_ORG_ID }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || "Failed to copy");
+      toast({ title: "Copied as demo", description: ev.title });
+      setPickerOpen(false);
+      load();
+    } catch (e: any) {
+      toast({
+        title: "Copy failed",
+        description: e?.message?.slice(0, 160),
+        variant: "destructive",
+      });
+    } finally {
+      setCopyingId(null);
+    }
+  };
+
+  const filteredPlatform = platformEvents.filter((e) => {
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (e.title || "").toLowerCase().includes(q) ||
+      (e.organizerName || "").toLowerCase().includes(q) ||
+      (e.category || "").toLowerCase().includes(q)
+    );
+  });
 
   // onSave handler for the reused event forms. Appends the showcase/demo flags
   // then POSTs create-event under the demo organizer (admin token).
@@ -217,7 +300,10 @@ export function ShowcaseEventsPage() {
             any action invites them to register / contact.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="buttonOutline" onClick={openPicker}>
+            <Copy className="mr-1 h-4 w-4" /> Copy from platform
+          </Button>
           <Button onClick={() => setCreating("professional")}>
             <Plus className="mr-1 h-4 w-4" /> Professional
           </Button>
@@ -226,6 +312,64 @@ export function ShowcaseEventsPage() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Copy an event as a demo</DialogTitle>
+            <DialogDescription>
+              Pick any event from any organizer. The copy is moved to the demo
+              organization with the original organizer's contact details,
+              links, volunteers and bookings removed. You can then edit it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search by event, organizer or category"
+              value={pickerQuery}
+              onChange={(e) => setPickerQuery(e.target.value)}
+            />
+          </div>
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+            {pickerLoading ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Loading…
+              </p>
+            ) : filteredPlatform.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No events found.
+              </p>
+            ) : (
+              filteredPlatform.map((ev) => (
+                <div
+                  key={ev._id}
+                  className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{ev.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {ev.organizerName}
+                      {ev.category ? ` · ${ev.category}` : ""}
+                      {ev.startDate
+                        ? ` · ${new Date(ev.startDate).toLocaleDateString()}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={copyingId !== null}
+                    onClick={() => copyAsDemo(ev)}
+                  >
+                    {copyingId === ev._id ? "Copying…" : "Copy as demo"}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

@@ -42,6 +42,7 @@ import { Model, Types } from "mongoose";
 import { buildDefaultStorefrontSettings } from "../organizer-stores/default-settings";
 import { OrganizerOrApiKeyGuard } from "../organizers/guards/organizer-or-api-key.guard";
 import { ThrottlerGuard } from "@nestjs/throttler";
+import { AdminRolesGuard } from "../auth/guards/admin-roles.guard";
 
 // Exported so the standalone uploads module (uploads/uploads.controller.ts —
 // backs SingAdvisor-style clients that upload an image separately from
@@ -806,6 +807,27 @@ export class EventsController {
       console.error("Error in getShowcaseEvents:", error);
       return { success: false, data: [] };
     }
+  }
+
+  // Admin: all real events across every organizer, for the "copy as demo"
+  // picker. Admin-only (organizer tokens are also valid JWTs).
+  @Get("showcase/platform-events")
+  @UseGuards(AuthGuard("jwt"), AdminRolesGuard)
+  async listPlatformEvents(@Query("q") q?: string) {
+    const data = await this.eventsService.listPlatformEvents(q);
+    return { success: true, data };
+  }
+
+  // Admin: copy a real event into a sanitized landing-page demo under the
+  // demo organization (organizer details removed).
+  @Post("showcase/clone/:id")
+  @UseGuards(AuthGuard("jwt"), AdminRolesGuard)
+  async cloneAsShowcase(
+    @Param("id") id: string,
+    @Body() body: { kind?: string; fallbackOrganizerId?: string },
+  ) {
+    const data = await this.eventsService.cloneAsShowcase(id, body || {});
+    return { success: true, data };
   }
 
   // Public: mint a short-lived READ-ONLY organizer session for the demo org so
