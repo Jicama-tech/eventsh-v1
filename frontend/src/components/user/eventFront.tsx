@@ -7468,6 +7468,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       />
       {(eventData as any)?.isDemo && (
         <div className="sticky top-0 z-[80] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
+          <button
+            onClick={() =>
+              window.history.length > 1
+                ? navigate(-1)
+                : (window.location.href = "/")
+            }
+            className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 hover:bg-white/30"
+          >
+            <ArrowLeft className="h-3 w-3" /> Back
+          </button>
           Live demo — this is an example event page.
           {((eventData as any)?.showcaseMode === "dashboard" ||
             (eventData as any)?.showcaseMode === "both") && (

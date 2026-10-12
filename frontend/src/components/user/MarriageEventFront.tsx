@@ -18,6 +18,7 @@ import {
   type MarriageStoryLayout,
 } from "@/lib/marriageThemes";
 import {
+  ArrowLeft,
   Heart,
   Calendar,
   Share2,
@@ -1202,6 +1203,16 @@ export default function MarriageEventFront({
       <div className="relative z-10">
         {isDemo && (
           <div className="sticky top-0 z-[80] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
+            <button
+              onClick={() =>
+                window.history.length > 1
+                  ? window.history.back()
+                  : (window.location.href = "/")
+              }
+              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 hover:bg-white/30"
+            >
+              <ArrowLeft className="h-3 w-3" /> Back
+            </button>
             Live demo — this is an example wedding page.
             {((eventData as any)?.showcaseMode === "dashboard" ||
               (eventData as any)?.showcaseMode === "both") && (
