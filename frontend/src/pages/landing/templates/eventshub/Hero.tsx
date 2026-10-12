@@ -90,7 +90,7 @@ export function Hero({ onShowLogin }: HeroSectionProps) {
               className="eh-btn eh-btn-p eh-btn-lg"
               onClick={onShowLogin}
             >
-              Start free
+              Get Started
             </button>
             {/* #platform is no longer rendered — the demos are what "see how
                 it works" means on this page now. */}

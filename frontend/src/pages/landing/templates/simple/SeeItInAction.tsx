@@ -310,7 +310,7 @@ function StartBar() {
         <strong>Your event</strong>
         <span>Pick a type, share the link, take bookings. About an hour.</span>
       </span>
-      <span className="sp-startgo">Start free →</span>
+      <span className="sp-startgo">Get Started →</span>
     </button>
   );
 }

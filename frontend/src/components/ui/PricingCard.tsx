@@ -72,7 +72,7 @@ const PricingCard = ({
         size="lg"
         className="w-full"
       >
-        {plan === "free" ? "Start Free" : "Upgrade Now"}
+        {plan === "free" ? "Get Started" : "Upgrade Now"}
       </Button>
     </div>
   );
