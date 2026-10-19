@@ -959,6 +959,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     useState(false);
   const [showScheduledSpacePicker, setShowScheduledSpacePicker] =
     useState(false);
+  // positionId of the facility the visitor tapped on the Venue Layout map —
+  // the slot picker then opens on just that facility (null = list them all).
+  const [focusedScheduledSpaceId, setFocusedScheduledSpaceId] = useState<
+    string | null
+  >(null);
   // A visitor can have more than one Scheduled Space request for the same
   // event over time (mirrors the Rent-a-Stall multi-request chooser) — this
   // holds every request found for their verified email so they can pick
@@ -1080,12 +1085,30 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Slot picker narrows to the facility type the registrant asked for (when
   // that field was collected) — otherwise every placed space is shown.
   const filteredScheduledSpaces = useMemo(() => {
+    // Tapped on the map → just that facility, whatever type was registered.
+    if (focusedScheduledSpaceId) {
+      return scheduledSpacesAvailable.filter(
+        (s: any) => s.positionId === focusedScheduledSpaceId,
+      );
+    }
     const want = existingScheduledSpaceRequest?.facilityTypeRequested;
     if (!want) return scheduledSpacesAvailable;
     return scheduledSpacesAvailable.filter(
       (s: any) => s.facilityType === want,
     );
-  }, [scheduledSpacesAvailable, existingScheduledSpaceRequest]);
+  }, [
+    scheduledSpacesAvailable,
+    existingScheduledSpaceRequest,
+    focusedScheduledSpaceId,
+  ]);
+
+  // Persons in the active Scheduled Space booking: the registrant plus the
+  // names they added (the server counts the same way when it checks a shared
+  // slot's head-count).
+  const scheduledPartySize =
+    1 +
+    (((existingScheduledSpaceRequest as any)?.companions as string[]) || [])
+      .length;
 
   // Effective round-table prices — honour the member tier when the viewer
   // holds an active membership (matches the backend booking calculation).
@@ -2095,6 +2118,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // "Type of Space Required" dropdown can show which facility types still
     // have open slots while the registrant is filling in the form.
     fetchAvailableScheduledSpaces();
+  };
+
+  // Tapping a facility on the Venue Layout map. Already registered and
+  // approved → straight to its slot picker; otherwise the normal Google
+  // sign-in → registration route, which ends in the same picker, with the
+  // facility type pre-filled and the picker narrowed to the tapped facility.
+  const handleScheduledSpaceMapClick = (space: any) => {
+    setFocusedScheduledSpaceId(space.positionId);
+    if (
+      !(eventData as any)?.isDemo &&
+      existingScheduledSpaceRequest?.status === "Confirmed"
+    ) {
+      fetchAvailableScheduledSpaces();
+      setShowScheduledSpacePicker(true);
+      return;
+    }
+    handleScheduledSpaceClick();
+    if (space.facilityType) {
+      setScheduledSpaceForm((p) => ({ ...p, facilityType: space.facilityType }));
+    }
   };
 
   // Same fetch-blob-and-trigger-download shape as the Stall ticket's
@@ -7089,10 +7132,31 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // Reference-only facility — stays on the map (hatched, like a
       // not-for-sale Space) but is never offered for booking.
       const notForSale = !isScheduledSpaceForSale(space);
+      // A bookable facility is tappable: it starts the booking flow and the
+      // slot picker opens on this facility. Reference-only ones stay inert.
       return (
         <div
           key={`vss-${space.positionId}`}
-          className="absolute flex items-center justify-center text-white shadow-md select-none pointer-events-none overflow-hidden"
+          role={notForSale ? undefined : "button"}
+          tabIndex={notForSale ? undefined : 0}
+          onClick={
+            notForSale ? undefined : () => handleScheduledSpaceMapClick(space)
+          }
+          onKeyDown={
+            notForSale
+              ? undefined
+              : (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleScheduledSpaceMapClick(space);
+                  }
+                }
+          }
+          className={`absolute flex items-center justify-center text-white shadow-md select-none overflow-hidden ${
+            notForSale
+              ? "pointer-events-none"
+              : "cursor-pointer hover:brightness-110 hover:ring-2 hover:ring-white/70 transition"
+          }`}
           style={{
             left: `${space.x}px`,
             top: `${space.y}px`,
@@ -7112,7 +7176,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               : undefined,
             zIndex: 5,
           }}
-          title={`${space.name} — ${space.facilityType}${notForSale ? " (not for sale)" : ""}`}
+          title={`${space.name} — ${space.facilityType}${notForSale ? " (not for sale)" : " — click to book a slot"}`}
         >
           <FacilityCourtMarkings
             facilityType={space.facilityType}
@@ -10028,7 +10092,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     </p>
                   )}
                   <button
-                    onClick={handleScheduledSpaceClick}
+                    onClick={() => {
+                      setFocusedScheduledSpaceId(null);
+                      handleScheduledSpaceClick();
+                    }}
                     className="w-full h-14 rounded-xl border-2 font-bold text-lg text-white shadow-md transition-all hover:opacity-90"
                     style={{
                       backgroundColor: design?.primaryColor || "#f97316",
@@ -15076,6 +15143,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               {scheduledSpaceOn("companions") && (
                 <div>
                   <Label>Persons Coming With You</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional. You + the names you add ={" "}
+                    {1 +
+                      scheduledSpaceForm.companions.filter((c) => c.trim())
+                        .length}{" "}
+                    person
+                    {scheduledSpaceForm.companions.filter((c) => c.trim())
+                      .length === 0
+                      ? ""
+                      : "s"}
+                    {(scheduledSpacesAvailable as any[]).some(
+                      (s: any) => s?.maxPersons,
+                    )
+                      ? ". Some slots are shared between bookings — you'll only be offered the ones with room for your group."
+                      : "."}
+                  </p>
                   <div className="space-y-2 mt-1">
                     {scheduledSpaceForm.companions.map((c, i) => (
                       <div key={i} className="flex gap-2">
@@ -15403,6 +15486,15 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             <DialogTitle>Pick a Space & Time Slot</DialogTitle>
           </DialogHeader>
           <ScheduledSpaceStepper current={3} />
+          {focusedScheduledSpaceId && (
+            <button
+              type="button"
+              className="text-xs text-blue-600 hover:underline text-left"
+              onClick={() => setFocusedScheduledSpaceId(null)}
+            >
+              Showing the space you tapped on the map — show all spaces
+            </button>
+          )}
           <div className="space-y-3">
             {filteredScheduledSpaces.length === 0 && (
               <p className="text-sm text-muted-foreground">
@@ -15435,16 +15527,24 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           s.positionId === space.positionId &&
                           s.slotId === slot.id,
                       );
+                      // Shared slot (facility has a max persons per slot):
+                      // bookable while this party still fits in what's left.
+                      const shared = !!space.maxPersons;
+                      const tooBig =
+                        shared &&
+                        !slot.isBooked &&
+                        scheduledPartySize > slot.remainingPersons;
+                      const blocked = slot.isBooked || tooBig;
                       return (
                         <button
                           key={slot.id}
                           type="button"
-                          disabled={slot.isBooked}
+                          disabled={blocked}
                           onClick={() =>
                             toggleScheduledSlotSelection(space, slot)
                           }
                           className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
-                            slot.isBooked
+                            blocked
                               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                               : isSelected
                                 ? "bg-blue-600 text-white border-blue-600"
@@ -15453,7 +15553,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         >
                           {slot.date} · {slot.startTime}-{slot.endTime}
                           {slot.label ? ` (${slot.label})` : ""}
-                          {slot.isBooked ? " — Booked" : ""}
+                          {slot.isBooked
+                            ? shared
+                              ? " — Full"
+                              : " — Booked"
+                            : shared
+                              ? tooBig
+                                ? ` — only ${slot.remainingPersons} left (you need ${scheduledPartySize})`
+                                : slot.bookedPersons > 0
+                                  ? ` — ${slot.bookedPersons} already in, ${slot.remainingPersons} left`
+                                  : ` — ${slot.remainingPersons} seats`
+                              : ""}
                         </button>
                       );
                     })}

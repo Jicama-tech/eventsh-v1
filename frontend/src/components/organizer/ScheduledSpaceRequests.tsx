@@ -531,6 +531,9 @@ const ScheduledSpaceRequests = ({
                 <div className="rounded-lg border p-3 space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     Selected Slots
+                    {selected.partySize > 1 || selected.selectedSlots.some((s: any) => s.persons > 0)
+                      ? ` · Group of ${selected.partySize || 1}`
+                      : ""}
                   </p>
                   {selected.selectedSlots.map((s: any, i: number) => (
                     <div
@@ -540,6 +543,9 @@ const ScheduledSpaceRequests = ({
                       <span>
                         {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
                         {s.slotLabel ? ` (${s.slotLabel})` : ""}
+                        {s.persons > 0
+                          ? ` · ${s.persons} of ${s.maxPersons} seats`
+                          : ""}
                       </span>
                       <span>{formatPrice(s.price)}</span>
                     </div>

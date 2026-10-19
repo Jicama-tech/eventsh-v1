@@ -486,7 +486,7 @@ export class AnalyticsService {
     const event = (await this.eventModel
       .findById(eventId)
       .select(
-        "title features visitorTypes seatRowTemplates venueSeats tableTemplates venueTables addOnItems roundTableTemplates venueRoundTables workshopSessions workshopPackages scheduledSpaceTemplates venueScheduledSpaces scheduledSpaceBookedSlots speakerSlotTemplates sponsorTypes",
+        "title features visitorTypes seatRowTemplates venueSeats tableTemplates venueTables addOnItems roundTableTemplates venueRoundTables workshopSessions workshopPackages scheduledSpaceTemplates venueScheduledSpaces scheduledSpaceBookedSlots scheduledSpaceSlotPersons speakerSlotTemplates sponsorTypes",
       )
       .lean()) as any;
     if (!event) throw new NotFoundException("Event not found");
@@ -982,8 +982,19 @@ export class AnalyticsService {
       const items: ReportItem[] = [
         ...ssTpls.map((tpl) => {
           const placed = placedSs.filter((p: any) => String(p.templateId) === String(tpl.id));
+          // A shared slot (template has maxPersons) stays open until its
+          // head-count reaches the cap; an exclusive one closes on first booking.
+          const cap = Number(tpl.maxPersons) || 0;
+          const personsBooked: Record<string, number> =
+            (event as any).scheduledSpaceSlotPersons || {};
           const open = sum(placed, (p: any) =>
-            slotsOf(p, tpl).filter((sl) => !booked.has(`${p.positionId}:${sl.id}`)).length,
+            slotsOf(p, tpl).filter((sl) => {
+              const token = `${p.positionId}:${sl.id}`;
+              if (booked.has(token)) return false;
+              return cap > 0
+                ? (Number(personsBooked[token.replace(/[.$]/g, "_")]) || 0) < cap
+                : true;
+            }).length,
           );
           const s = sales.get(String(tpl.id)) || { sold: 0, revenue: 0 };
           return {

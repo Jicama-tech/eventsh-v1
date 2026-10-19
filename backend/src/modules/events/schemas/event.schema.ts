@@ -384,6 +384,10 @@ class ScheduledSpaceTemplate {
   // booking completes the moment the visitor picks their slots (and
   // submits payment for a priced space) — ticket emailed and shown at once.
   @Prop({ default: true }) requiresApproval: boolean;
+  // Max persons per slot. Unset (every template from before this existed) =
+  // exclusive: one booking takes the whole slot. Set = shared: several
+  // bookings can split the slot until the head-count reaches this number.
+  @Prop() maxPersons?: number;
   // Legacy: operator this space was once assigned to. No longer read —
   // every space is shown to every visitor, and operator referral codes only
   // attribute bookings (see OperatorsService.resolveReferral).
@@ -412,6 +416,9 @@ class PositionedScheduledSpace {
   @Prop({ default: true }) forSale: boolean;
   // Same snapshot rule — see ScheduledSpacesService.requiresApproval.
   @Prop({ default: true }) requiresApproval: boolean;
+  // Snapshot of the template's maxPersons — the template wins when it still
+  // exists (see ScheduledSpacesService.maxPersonsOf).
+  @Prop() maxPersons?: number;
   @Prop() x: number;
   @Prop() y: number;
   @Prop({ default: 0 }) rotation: number;
@@ -994,6 +1001,13 @@ export class Event {
   // seatMapBookedSeats above. Tokens: `${positionId}:${slotId}`.
   @Prop({ type: [String], default: [] })
   scheduledSpaceBookedSlots?: string[];
+
+  // Head-count ledger for SHARED slots (templates with maxPersons set):
+  // `${positionId}:${slotId}` (dots/$ swapped for "_") -> persons booked so
+  // far. Exclusive slots (no maxPersons) never appear here; they use the
+  // token ledger above.
+  @Prop({ type: Object, default: {} })
+  scheduledSpaceSlotPersons?: Record<string, number>;
 
   // Placed entrance / exit doors. Each entry carries its own
   // venueConfigId so multi-config layouts can group them per venue at

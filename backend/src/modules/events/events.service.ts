@@ -537,6 +537,7 @@ export class EventsService {
       }));
     doc.seatMapBookedSeats = [];
     doc.scheduledSpaceBookedSlots = [];
+    doc.scheduledSpaceSlotPersons = {};
     if (doc.originalTotalTickets != null)
       doc.totalTickets = doc.originalTotalTickets;
 

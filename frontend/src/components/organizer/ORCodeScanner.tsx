@@ -2221,6 +2221,12 @@ export default function QRTicketScanner() {
                   <p className="font-semibold text-rose-800">
                     {scheduledSpaceData.name}
                   </p>
+                  {scheduledSpaceData.partySize > 1 && (
+                    <p className="text-sm font-medium text-rose-700">
+                      Group of {scheduledSpaceData.partySize} — admit all{" "}
+                      {scheduledSpaceData.partySize}
+                    </p>
+                  )}
                   {scheduledSpaceData.selectedSlots?.length > 0 && (
                     <div className="space-y-1">
                       {scheduledSpaceData.selectedSlots.map(

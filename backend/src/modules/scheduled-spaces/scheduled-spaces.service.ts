@@ -120,6 +120,9 @@ export class ScheduledSpacesService {
     // written unless the code resolved to an agent or operator.
     assertReferralIfRequired(event, referral, dto.referralCode);
 
+    const companions = (dto.companions || [])
+      .map((c) => (c || "").trim())
+      .filter(Boolean);
     const request = new this.requestModel({
       eventId: new Types.ObjectId(String(dto.eventId)),
       organizerId: new Types.ObjectId(String(dto.organizerId)),
@@ -131,7 +134,8 @@ export class ScheduledSpacesService {
       purpose: dto.purpose,
       organization: dto.organization,
       ...(referral || {}),
-      companions: (dto.companions || []).filter((c) => c && c.trim()),
+      companions: companions,
+      partySize: 1 + companions.length,
       status: ScheduledSpaceStatusEnum.Confirmed,
       statusHistory: [{ status: ScheduledSpaceStatusEnum.Confirmed }],
     });
@@ -188,6 +192,52 @@ export class ScheduledSpacesService {
     return !!tpl && tpl.requiresApproval !== false;
   }
 
+  // Max persons per slot. Set = a SHARED slot: several bookings split it
+  // until the head-count reaches this number. Unset = exclusive (the original
+  // behaviour). Like requiresApproval, the template wins while it exists so a
+  // later edit applies to already-placed instances; the placed row is the
+  // fallback if the template was deleted.
+  private maxPersonsOf(event: any, space: any): number {
+    const tpl = (event?.scheduledSpaceTemplates || []).find(
+      (t: any) => String(t?.id) === String(space?.templateId),
+    );
+    const v = Number(tpl ? tpl.maxPersons : space?.maxPersons);
+    return Number.isInteger(v) && v >= 1 ? v : 0;
+  }
+
+  // Key of a slot in event.scheduledSpaceSlotPersons — Mongo field names
+  // can't carry "." or a leading "$".
+  private personsKey(token: string): string {
+    return token.replace(/[.$]/g, "_");
+  }
+
+  // Gives a request's slots back: head-count for shared slots, ledger token
+  // for exclusive ones. What was held is read off the request itself
+  // (selectedSlots[].persons), so it stays right even if the template's
+  // max persons was edited after the booking.
+  private async releaseSlots(request: ScheduledSpaceRequestDocument) {
+    const exclusive: string[] = [];
+    const inc: Record<string, number> = {};
+    for (const s of request.selectedSlots || []) {
+      const token = `${s.positionId}:${s.slotId}`;
+      if ((s.persons || 0) > 0) {
+        inc[`scheduledSpaceSlotPersons.${this.personsKey(token)}`] = -(
+          s.persons as number
+        );
+      } else {
+        exclusive.push(token);
+      }
+    }
+    const update: any = {};
+    if (exclusive.length) {
+      update.$pull = { scheduledSpaceBookedSlots: { $in: exclusive } };
+    }
+    if (Object.keys(inc).length) update.$inc = inc;
+    if (Object.keys(update).length) {
+      await this.eventModel.updateOne({ _id: request.eventId }, update);
+    }
+  }
+
   // Placed instances with their template-defined slots, annotated with
   // which (positionId, slotId) tokens are already reserved. Mirrors
   // stalls.service.ts's getAvailableTables, but per-slot rather than
@@ -205,21 +255,47 @@ export class ScheduledSpacesService {
     if (!event) throw new NotFoundException("Event not found");
 
     const bookedTokens = new Set<string>(event.scheduledSpaceBookedSlots || []);
+    const personsBooked: Record<string, number> =
+      (event as any).scheduledSpaceSlotPersons || {};
 
     const spaces = (event.venueScheduledSpaces || [])
       .filter((space: any) => this.isForSale(event, space))
       .map((space: any) => (space?.toObject ? space.toObject() : space))
       .map((s: any) => {
-        const slots = (s.slots || []).map((slot: any) => ({
-          ...slot,
-          isBooked: bookedTokens.has(`${s.positionId}:${slot.id}`),
-        }));
+        const maxPersons = this.maxPersonsOf(event, s);
+        const slots = (s.slots || []).map((slot: any) => {
+          const token = `${s.positionId}:${slot.id}`;
+          // Shared slot: full only once the head-count reaches the cap (a
+          // token in the exclusive ledger means it was booked whole before
+          // the cap existed, so that still blocks it).
+          if (maxPersons > 0) {
+            const taken = Math.max(
+              0,
+              Number(personsBooked[this.personsKey(token)]) || 0,
+            );
+            const remaining = bookedTokens.has(token)
+              ? 0
+              : Math.max(0, maxPersons - taken);
+            return {
+              ...slot,
+              bookedPersons: maxPersons - remaining,
+              remainingPersons: remaining,
+              isBooked: remaining === 0,
+            };
+          }
+          return { ...slot, isBooked: bookedTokens.has(token) };
+        });
         // Tells the visitor side up-front whether picking this facility
         // yields the ticket immediately (Booking Approval = Instant Ticket)
         // so the payment page can say so instead of "the organizer will
         // confirm". Resolved here with the same row+template rule
         // selectSlots enforces, so the two can't disagree.
-        return { ...s, slots, instantTicket: !this.requiresApproval(event, s) };
+        return {
+          ...s,
+          slots,
+          maxPersons: maxPersons || undefined,
+          instantTicket: !this.requiresApproval(event, s),
+        };
       });
 
     return {
@@ -267,7 +343,14 @@ export class ScheduledSpacesService {
     // "instant ticket" selection is ticketed on the spot (below).
     const resolved: any[] = [];
     let needsApproval = false;
+    // Registrant + the companions they named: what a shared slot's
+    // head-count is checked against.
+    const partySize = 1 + (request.companions || []).length;
+    const seen = new Set<string>();
     for (const sel of dto.selectedSlots) {
+      const selToken = `${sel.positionId}:${sel.slotId}`;
+      if (seen.has(selToken)) continue;
+      seen.add(selToken);
       const space = (event.venueScheduledSpaces || []).find(
         (s: any) => s.positionId === sel.positionId,
       );
@@ -290,7 +373,15 @@ export class ScheduledSpacesService {
           `Slot ${sel.slotId} no longer exists on space "${space.name}".`,
         );
       }
+      const maxPersons = this.maxPersonsOf(event, space);
+      if (maxPersons > 0 && partySize > maxPersons) {
+        throw new BadRequestException(
+          `"${space.name}" fits at most ${maxPersons} person${maxPersons === 1 ? "" : "s"} per slot, and your booking is for ${partySize}.`,
+        );
+      }
       resolved.push({
+        persons: maxPersons > 0 ? partySize : 0,
+        maxPersons: maxPersons > 0 ? maxPersons : undefined,
         positionId: sel.positionId,
         templateId: sel.templateId,
         slotId: sel.slotId,
@@ -306,13 +397,31 @@ export class ScheduledSpacesService {
 
     const tokens = resolved.map((r) => `${r.positionId}:${r.slotId}`);
 
-    // Atomic reservation — succeeds only if NONE of the tokens are already
-    // in the ledger. A modifiedCount of 0 means at least one slot was taken
-    // out from under this registrant by a concurrent request.
-    const result = await this.eventModel.updateOne(
-      { _id: event._id, scheduledSpaceBookedSlots: { $nin: tokens } },
-      { $push: { scheduledSpaceBookedSlots: { $each: tokens } } },
-    );
+    // Atomic reservation, one update for every slot. Exclusive slots succeed
+    // only if their token isn't in the ledger yet; shared slots only if the
+    // head-count already there leaves room for this party. A modifiedCount of
+    // 0 means at least one slot was taken (or filled up) out from under this
+    // registrant by a concurrent request, and nothing is held.
+    const exclusiveTokens = resolved
+      .filter((r) => !r.persons)
+      .map((r) => `${r.positionId}:${r.slotId}`);
+    const filter: any = {
+      _id: event._id,
+      scheduledSpaceBookedSlots: { $nin: tokens },
+    };
+    const inc: Record<string, number> = {};
+    for (const r of resolved) {
+      if (!r.persons) continue;
+      const field = `scheduledSpaceSlotPersons.${this.personsKey(`${r.positionId}:${r.slotId}`)}`;
+      filter[field] = { $not: { $gt: r.maxPersons - r.persons } };
+      inc[field] = r.persons;
+    }
+    const reserve: any = {};
+    if (exclusiveTokens.length) {
+      reserve.$push = { scheduledSpaceBookedSlots: { $each: exclusiveTokens } };
+    }
+    if (Object.keys(inc).length) reserve.$inc = inc;
+    const result = await this.eventModel.updateOne(filter, reserve);
     if (!result.modifiedCount) {
       throw new BadRequestException(
         "One or more selected slots are no longer available. Please pick again.",
@@ -322,6 +431,7 @@ export class ScheduledSpacesService {
     const slotsTotal = resolved.reduce((sum, r) => sum + (r.price || 0), 0);
 
     request.selectedSlots = resolved as any;
+    request.partySize = partySize;
     request.slotsTotal = slotsTotal;
 
     // Free/charity spaces (organizer never set a price) skip straight past
@@ -541,6 +651,13 @@ export class ScheduledSpacesService {
         request.whatsappNumber
           ? p(`<span style="color:${c.muted};">WhatsApp:</span> ${strong(request.whatsappNumber)}`)
           : "",
+        this.isGroupBooking(request)
+          ? p(
+              `<span style="color:${c.muted};">Group size:</span> ${strong(
+                `${request.partySize} person${request.partySize === 1 ? "" : "s"}`,
+              )} — this ticket admits your whole group.`,
+            )
+          : "",
         slotTable,
         image(`cid:${qrCid}`, "Check-in QR", 180),
       ].join(""),
@@ -609,6 +726,15 @@ export class ScheduledSpacesService {
     }
   }
 
+  // True when the ticket covers a group in a shared slot — worth stating on
+  // the ticket so the door knows how many people this one QR admits.
+  private isGroupBooking(request: ScheduledSpaceRequestDocument): boolean {
+    return (
+      (request.partySize || 1) > 1 ||
+      (request.selectedSlots || []).some((s) => (s.persons || 0) > 0)
+    );
+  }
+
   // Renders a single-page PDF ticket (event, registrant, booked slots, QR)
   // via headless Chromium — same puppeteer approach as the Stalls ticket.
   private async generateTicketPDF(
@@ -669,6 +795,11 @@ export class ScheduledSpacesService {
             ${
               request.whatsappNumber
                 ? `<div class="row"><span>WhatsApp</span><strong>${escapeEmailHtml(request.whatsappNumber)}</strong></div>`
+                : ""
+            }
+            ${
+              this.isGroupBooking(request)
+                ? `<div class="row"><span>Group size</span><strong>${request.partySize} person${request.partySize === 1 ? "" : "s"}</strong></div>`
                 : ""
             }
             <table>
@@ -779,17 +910,14 @@ export class ScheduledSpacesService {
     if (!request) throw new NotFoundException("Request not found");
 
     const releasingStatuses = ["Rejected", "Cancelled"];
+    // Not when it was already released: giving back a shared slot's seats is
+    // a decrement, so a second Cancel must not take them twice.
     if (
       releasingStatuses.includes(dto.status) &&
+      !releasingStatuses.includes(request.status) &&
       request.selectedSlots?.length
     ) {
-      const tokens = request.selectedSlots.map(
-        (s) => `${s.positionId}:${s.slotId}`,
-      );
-      await this.eventModel.updateOne(
-        { _id: request.eventId },
-        { $pull: { scheduledSpaceBookedSlots: { $in: tokens } } },
-      );
+      await this.releaseSlots(request);
     }
 
     request.status = dto.status;
@@ -888,6 +1016,7 @@ export class ScheduledSpacesService {
       data: {
         requestId: request._id,
         name: request.name,
+        partySize: request.partySize || 1,
         checkInTime: request.checkInTime,
         selectedSlots: request.selectedSlots,
       },
@@ -934,14 +1063,11 @@ export class ScheduledSpacesService {
     }
     const request = await this.requestModel.findById(id);
     if (!request) throw new NotFoundException("Request not found");
-    if (request.selectedSlots?.length) {
-      const tokens = request.selectedSlots.map(
-        (s) => `${s.positionId}:${s.slotId}`,
-      );
-      await this.eventModel.updateOne(
-        { _id: request.eventId },
-        { $pull: { scheduledSpaceBookedSlots: { $in: tokens } } },
-      );
+    if (
+      request.selectedSlots?.length &&
+      !["Rejected", "Cancelled"].includes(request.status)
+    ) {
+      await this.releaseSlots(request);
     }
     await this.requestModel.deleteOne({ _id: id });
     return { success: true };
