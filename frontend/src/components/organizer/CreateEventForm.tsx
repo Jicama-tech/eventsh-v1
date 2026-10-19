@@ -424,6 +424,10 @@ interface ScheduledSpaceTemplate {
   // before the QR ticket is issued; false = "instant ticket" — the booking
   // completes the moment the visitor picks slots (and pays, if priced).
   requiresApproval?: boolean;
+  // Max persons per slot. Unset = exclusive (one booking takes the whole
+  // slot); set = shared — several bookings split the slot until the
+  // head-count reaches this number.
+  maxPersons?: number;
   // Legacy: operator this space was once assigned to. No longer set from
   // the form or used for filtering — kept so previously saved events load.
   operatorId?: string;
@@ -3454,6 +3458,7 @@ const ScheduledSpaceManagement = ({
     slots: ScheduleSlot[];
     forSale: boolean;
     requiresApproval: boolean;
+    maxPersons: string;
   };
   setCurrent: React.Dispatch<React.SetStateAction<typeof current>>;
 }) => {
@@ -3487,6 +3492,7 @@ const ScheduledSpaceManagement = ({
       slots: [],
       forSale: true,
       requiresApproval: true,
+      maxPersons: "",
     });
     setEditingId(null);
   };
@@ -3670,6 +3676,9 @@ const ScheduledSpaceManagement = ({
       slots: current.slots,
       forSale: current.forSale,
       requiresApproval: current.requiresApproval,
+      maxPersons: parseInt(current.maxPersons, 10) >= 1
+        ? parseInt(current.maxPersons, 10)
+        : undefined,
     };
     if (editingId) {
       setTemplates(templates.map((t) => (t.id === editingId ? data : t)));
@@ -3701,6 +3710,7 @@ const ScheduledSpaceManagement = ({
       slots: t.slots || [],
       forSale: t.forSale !== false,
       requiresApproval: t.requiresApproval !== false,
+      maxPersons: t.maxPersons ? String(t.maxPersons) : "",
     });
     setEditingId(id);
   };
@@ -3746,8 +3756,9 @@ const ScheduledSpaceManagement = ({
         <CardTitle>{t("Scheduled Spaces")}</CardTitle>
         <p className="text-sm text-muted-foreground">
           Facilities bookable by time slot — tennis courts, cricket grounds,
-          chess tables and the like. Booking a slot reserves the whole
-          facility exclusively for that window.
+          chess tables and the like. By default booking a slot reserves the
+          whole facility exclusively for that window; set Max Persons per Slot
+          to let several bookings share it.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -3875,6 +3886,27 @@ const ScheduledSpaceManagement = ({
                     setCurrent((p) => ({ ...p, price: e.target.value }))
                   }
                 />
+              </div>
+              {/* Max persons per slot — blank keeps the original exclusive
+                  slot (one booking takes it whole); a number makes the slot
+                  shared: bookings fill it person by person until it's full. */}
+              <div>
+                <Label>{t("Max Persons per Slot")}</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="Blank = one booking per slot"
+                  value={current.maxPersons}
+                  onChange={(e) =>
+                    setCurrent((p) => ({ ...p, maxPersons: e.target.value }))
+                  }
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {parseInt(current.maxPersons, 10) >= 1
+                    ? `Several bookings can share a slot until ${parseInt(current.maxPersons, 10)} persons are in. Each booking counts the visitor + the names they add, and gets its own QR ticket.`
+                    : "Set this to let several bookings share one slot (e.g. 6 = up to 6 persons per slot)."}
+                </p>
               </div>
               {/* Booking approval — "Approval Required" keeps the original
                   flow (the organizer confirms every booking before the QR
@@ -4234,6 +4266,14 @@ const ScheduledSpaceManagement = ({
                           className="text-[9px] px-1.5 py-0 border-green-300 text-green-700 bg-green-50"
                         >
                           Instant Ticket
+                        </Badge>
+                      )}
+                      {t.forSale !== false && !!t.maxPersons && (
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 border-blue-300 text-blue-700 bg-blue-50"
+                        >
+                          Max {t.maxPersons} / slot
                         </Badge>
                       )}
                       <Badge variant="outline" className="text-[9px] px-1.5 py-0">
@@ -9538,6 +9578,7 @@ export function CreateEventForm({
     slots: [] as ScheduleSlot[],
     forSale: true,
     requiresApproval: true,
+    maxPersons: "",
   });
 
   // Replace your currentAddOn state with this:

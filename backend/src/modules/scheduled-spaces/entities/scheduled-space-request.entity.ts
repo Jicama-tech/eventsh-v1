@@ -45,6 +45,16 @@ class SelectedSlot {
 
   @Prop({ required: true })
   price: number;
+
+  // Head-count this booking holds in a SHARED slot (the facility has a max
+  // persons per slot). 0/unset = the slot was exclusive, held by token — which
+  // is also how a cancel knows whether to give back seats or a token.
+  @Prop({ default: 0 })
+  persons?: number;
+
+  // The slot's capacity when it was booked — shown on the ticket as "x of N".
+  @Prop()
+  maxPersons?: number;
 }
 
 @Schema({ _id: false })
@@ -124,6 +134,11 @@ export class ScheduledSpaceRequest {
   // guest names work: display-only, not booking records of their own).
   @Prop({ type: [String], default: [] })
   companions: string[];
+
+  // Persons this booking brings: the registrant + named companions. Fixed
+  // when the slots are picked and used for every shared slot's head-count.
+  @Prop({ default: 1 })
+  partySize: number;
 
   @Prop({
     enum: ScheduledSpaceStatusEnum,

@@ -8,6 +8,7 @@ import {
   IsEnum,
   ValidateNested,
   IsNumber,
+  IsInt,
   IsObject,
   Min,
   Matches,
@@ -591,6 +592,8 @@ export class ScheduledSpaceTemplateDto {
   // false = "instant ticket" (no organizer approval step); unset/true =
   // the organizer confirms each booking before the ticket is issued.
   @IsBoolean() @IsOptional() requiresApproval?: boolean;
+  // Max persons per slot; unset = exclusive (one booking per slot).
+  @IsInt() @Min(1) @IsOptional() maxPersons?: number;
   // Legacy operator assignment — accepted for old templates, no longer read.
   // Referral codes only attribute bookings; they never filter spaces.
   @IsString() @IsOptional() operatorId?: string;
@@ -616,6 +619,7 @@ export class PositionedScheduledSpaceDto {
   slots?: ScheduleSlotDto[];
   @IsBoolean() @IsOptional() forSale?: boolean;
   @IsBoolean() @IsOptional() requiresApproval?: boolean;
+  @IsInt() @Min(1) @IsOptional() maxPersons?: number;
   @IsNumber() x: number;
   @IsNumber() y: number;
   @IsNumber() @IsOptional() rotation?: number;
