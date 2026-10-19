@@ -676,16 +676,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Gallery's existing chevron pattern.
   const speakersScrollRef = useRef<HTMLDivElement | null>(null);
   const workshopsScrollRef = useRef<HTMLDivElement | null>(null);
-  // Collapsible Venue Layout — defaults to closed so the heavy canvas
-  // (and the multi-layout selector / stats grid) only render after the
-  // user explicitly opts in by clicking the chevron header.
-  const [showVenueLayout, setShowVenueLayout] = useState(false);
-  // Demo events (landing-page showcase) open the venue map straight away — no
-  // click needed — so visitors see the layout and spaces immediately.
-  const isDemoEvent = !!(eventData as any)?.isDemo;
-  useEffect(() => {
-    if (isDemoEvent) setShowVenueLayout(true);
-  }, [isDemoEvent]);
+  // The venue map is always open — there is no collapse control any more, so
+  // visitors see the layout and can tap a space straight away.
+  const showVenueLayout = true;
+  const setShowVenueLayout = (_open: boolean) => {};
   const [venueMaximized, setVenueMaximized] = useState(false);
   // Controlled active tab so the info cards can jump to a section, and a ref
   // to the tabs block so we can scroll it into view on card click.
@@ -11182,12 +11176,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     as one clickable disclosure. */}
                   {venueConfig && venueConfig[currentLayoutIndex] && (
                     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                      <button
-                        type="button"
-                        onClick={() => setShowVenueLayout((v) => !v)}
-                        aria-expanded={showVenueLayout}
-                        className="w-full px-5 pt-5 pb-3 flex items-center gap-2 hover:bg-gray-50 transition-colors"
-                      >
+                      <div className="w-full px-5 pt-5 pb-3 flex items-center gap-2">
                         <TableIcon className="h-4 w-4 text-gray-400" />
                         <p
                           className="text-sm sm:text-lg font-bold tracking-widest uppercase text-left"
@@ -11196,14 +11185,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           {venueConfig[currentLayoutIndex].name} — Space
                           Arrangement
                         </p>
-                        <span className="ml-auto">
-                          {showVenueLayout ? (
-                            <ChevronUp className="h-4 w-4 text-gray-500" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-gray-500" />
-                          )}
-                        </span>
-                      </button>
+                      </div>
                       {showVenueLayout && (
                         <div className="px-5 pb-5 space-y-5">
                           {/* Venue map */}
