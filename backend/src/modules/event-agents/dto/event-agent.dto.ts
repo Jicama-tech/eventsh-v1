@@ -1,5 +1,7 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -12,10 +14,30 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from "class-validator";
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === "string" ? value.trim() : value;
+
+/** Most extra contacts one agent may list. */
+export const MAX_EXTRA_CONTACTS = 20;
+
+/** One extra person reachable through an agent (a sub-agent, an assistant). */
+export class AgentContactDto {
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+
+  @Transform(trim)
+  @IsString()
+  @Matches(/^\+?[\d\s()-]{8,20}$/, {
+    message: "Enter each contact's number with its country code, e.g. +91 98765 43210.",
+  })
+  phone: string;
+}
 
 /** A new agent for an event. The referral code is generated, never posted. */
 export class CreateEventAgentDto {
@@ -49,6 +71,14 @@ export class CreateEventAgentDto {
   @Min(0)
   @Max(1_000_000)
   maxUses?: number;
+
+  /** Sub-agents / more numbers, shown together on the agent's contact card. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_EXTRA_CONTACTS)
+  @ValidateNested({ each: true })
+  @Type(() => AgentContactDto)
+  extraContacts?: AgentContactDto[];
 }
 
 export class UpdateEventAgentDto {
@@ -84,6 +114,14 @@ export class UpdateEventAgentDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** The full replacement list (send [] to clear it). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_EXTRA_CONTACTS)
+  @ValidateNested({ each: true })
+  @Type(() => AgentContactDto)
+  extraContacts?: AgentContactDto[];
 }
 
 /** Which channels to send the agent's link on. Default: every one on file. */
