@@ -4676,6 +4676,8 @@ const VenueDesigner = ({
     origH: number;
     w: number;
     h: number;
+    // Which dimension(s) the grabbed handle moves: corner = both.
+    axis: "both" | "x" | "y";
   } | null>(null);
   const canvasResizeRef = useRef<typeof canvasResize>(null);
   canvasResizeRef.current = canvasResize;
@@ -4865,7 +4867,7 @@ const VenueDesigner = ({
   const isResizingCanvas = canvasResize !== null;
   useEffect(() => {
     if (!isResizingCanvas) return;
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const r = canvasResizeRef.current;
       const sc = venueConfig?.scale || 1;
       if (!r) return;
@@ -4873,8 +4875,14 @@ const VenueDesigner = ({
       const dh = (e.clientY - r.startY) / sc;
       setCanvasResize({
         ...r,
-        w: Math.max(200, Math.round(r.origW + dw)),
-        h: Math.max(200, Math.round(r.origH + dh)),
+        w:
+          r.axis === "y"
+            ? r.origW
+            : Math.max(100, Math.round(r.origW + dw)),
+        h:
+          r.axis === "x"
+            ? r.origH
+            : Math.max(100, Math.round(r.origH + dh)),
       });
     };
     const onUp = () => {
@@ -4888,11 +4896,16 @@ const VenueDesigner = ({
         });
       setCanvasResize(null);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    // Pointer events (not mouse) so the crop drag also works with touch and
+    // pen, and a cancelled gesture still ends the drag instead of leaving it
+    // stuck.
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isResizingCanvas]);
@@ -5345,9 +5358,24 @@ const VenueDesigner = ({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTable, currentTables, currentRoundTables, canvasW, canvasH]);
+    // Every collection the duplicate/undo handlers read must be a dependency,
+    // or the shortcut runs on a stale snapshot — e.g. Ctrl+D after dragging a
+    // Scheduled Space re-created it at its OLD position next to the clone.
+  }, [
+    selectedTable,
+    currentTables,
+    currentRoundTables,
+    currentScheduledSpaces,
+    currentSeats,
+    venueScheduledSpaces,
+    venueSeats,
+    venueTables,
+    venueRoundTables,
+    canvasW,
+    canvasH,
+  ]);
 
-  const rotateTable = (positionId: string) => {
+  const rotateTable =(positionId: string) => {
     const table = currentTables.find((t) => t.positionId === positionId);
     if (table) {
       handleUpdateTable(positionId, { rotation: (table.rotation + 90) % 360 });
@@ -7173,7 +7201,97 @@ const VenueDesigner = ({
                   )}
                 </div>
                 {/* Preview + Maximize grouped together as one control cluster. */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Exact crop — the visitor view shows precisely this
+                      width × height (venue units, 10 = 1 m). Same fields the
+                      corner drag handle writes, so either way works; Reset
+                      returns to the full venue. */}
+                  {venueConfig && (
+                    <div
+                      className="flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs"
+                      title="Crop the venue area visitors see"
+                    >
+                      <Crop className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground">Crop</span>
+                      <Input
+                        type="number"
+                        min={100}
+                        className="h-7 w-20 px-1.5 text-xs"
+                        key={`cw-${Math.round(venueConfig.cropWidth ?? venueConfig.width)}`}
+                        defaultValue={Math.round(
+                          venueConfig.cropWidth ?? venueConfig.width,
+                        )}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                        onBlur={(e) => {
+                          const v = Math.round(Number(e.target.value));
+                          if (!Number.isFinite(v) || v < 100) {
+                            e.target.value = String(
+                              Math.round(
+                                venueConfig.cropWidth ?? venueConfig.width,
+                              ),
+                            );
+                            return;
+                          }
+                          patchVenueConfig({
+                            cropWidth: v,
+                            cropHeight:
+                              venueConfig.cropHeight ?? venueConfig.height,
+                            cropped: true,
+                          });
+                        }}
+                      />
+                      <span className="text-muted-foreground">×</span>
+                      <Input
+                        type="number"
+                        min={100}
+                        className="h-7 w-20 px-1.5 text-xs"
+                        key={`ch-${Math.round(venueConfig.cropHeight ?? venueConfig.height)}`}
+                        defaultValue={Math.round(
+                          venueConfig.cropHeight ?? venueConfig.height,
+                        )}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                        onBlur={(e) => {
+                          const v = Math.round(Number(e.target.value));
+                          if (!Number.isFinite(v) || v < 100) {
+                            e.target.value = String(
+                              Math.round(
+                                venueConfig.cropHeight ?? venueConfig.height,
+                              ),
+                            );
+                            return;
+                          }
+                          patchVenueConfig({
+                            cropWidth:
+                              venueConfig.cropWidth ?? venueConfig.width,
+                            cropHeight: v,
+                            cropped: true,
+                          });
+                        }}
+                      />
+                      {venueConfig.cropped && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() =>
+                            patchVenueConfig({
+                              cropped: false,
+                              cropWidth: undefined,
+                              cropHeight: undefined,
+                            })
+                          }
+                          title="Remove the crop and show the whole venue"
+                        >
+                          Reset
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -8638,34 +8756,71 @@ const VenueDesigner = ({
                         >
                           Crop {Math.round(liveW)} × {Math.round(liveH)}
                         </div>
-                        <div
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setCanvasResize({
-                              startX: e.clientX,
-                              startY: e.clientY,
-                              origW: baseW,
-                              origH: baseH,
-                              w: baseW,
-                              h: baseH,
-                            });
-                          }}
-                          title="Drag to crop / resize the venue area"
-                          style={{
-                            position: "absolute",
-                            left: bw - 9,
-                            top: bh - 9,
-                            width: 18,
-                            height: 18,
-                            background: "#2563eb",
-                            border: "2px solid white",
-                            borderRadius: 4,
-                            cursor: "nwse-resize",
-                            zIndex: 42,
-                            boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
-                          }}
-                        />
+                        {/* Corner moves both edges; the two middle handles move
+                            one edge each. touch-action:none so a finger/pen
+                            drag isn't swallowed by page scrolling. */}
+                        {(
+                          [
+                            {
+                              axis: "both" as const,
+                              left: bw - 12,
+                              top: bh - 12,
+                              size: [24, 24],
+                              cursor: "nwse-resize",
+                              title: "Drag to crop / resize the venue area",
+                            },
+                            {
+                              axis: "x" as const,
+                              left: bw - 6,
+                              top: bh / 2 - 16,
+                              size: [12, 32],
+                              cursor: "ew-resize",
+                              title: "Drag to crop the right edge",
+                            },
+                            {
+                              axis: "y" as const,
+                              left: bw / 2 - 16,
+                              top: bh - 6,
+                              size: [32, 12],
+                              cursor: "ns-resize",
+                              title: "Drag to crop the bottom edge",
+                            },
+                          ] as const
+                        ).map((hd) => (
+                          <div
+                            key={hd.axis}
+                            onPointerDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setCanvasResize({
+                                startX: e.clientX,
+                                startY: e.clientY,
+                                origW: baseW,
+                                origH: baseH,
+                                w: baseW,
+                                h: baseH,
+                                axis: hd.axis,
+                              });
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            title={hd.title}
+                            style={{
+                              position: "absolute",
+                              left: hd.left,
+                              top: hd.top,
+                              width: hd.size[0],
+                              height: hd.size[1],
+                              background: "#2563eb",
+                              border: "2px solid white",
+                              borderRadius: 5,
+                              cursor: hd.cursor,
+                              touchAction: "none",
+                              zIndex: 60,
+                              boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
+                            }}
+                          />
+                        ))}
                       </>
                     );
                   })()}
