@@ -24,6 +24,7 @@ import { plainName } from "../whatsapp/whatsapp-text";
 import { EventAgent, EventAgentDocument } from "./schemas/event-agent.schema";
 import {
   CreateEventAgentDto,
+  MAX_EXTRA_CONTACTS,
   ShareEventAgentDto,
   UpdateEventAgentDto,
 } from "./dto/event-agent.dto";
@@ -34,6 +35,8 @@ export type EventAgentView = {
   name: string;
   whatsAppNumber: string;
   email: string;
+  /** Sub-agents / more numbers listed with this agent. */
+  extraContacts: { name: string; phone: string }[];
   referralCode: string;
   /** 0 = unlimited. */
   maxUses: number;
@@ -166,6 +169,7 @@ export class EventAgentsService {
       name: dto.name,
       whatsAppNumber: dto.whatsAppNumber || "",
       email: dto.email || "",
+      extraContacts: cleanContacts(dto.extraContacts),
       referralCode,
       maxUses: Number(dto.maxUses) || 0,
       usedCount: 0,
@@ -188,6 +192,9 @@ export class EventAgentsService {
     if (dto.name !== undefined) agent.name = dto.name;
     if (dto.whatsAppNumber !== undefined) agent.whatsAppNumber = dto.whatsAppNumber;
     if (dto.email !== undefined) agent.email = dto.email;
+    if (dto.extraContacts !== undefined) {
+      agent.extraContacts = cleanContacts(dto.extraContacts);
+    }
     if (dto.maxUses !== undefined) agent.maxUses = Number(dto.maxUses) || 0;
     if (dto.isActive !== undefined) agent.isActive = !!dto.isActive;
     if (!agent.whatsAppNumber && !agent.email) {
@@ -331,7 +338,12 @@ export class EventAgentsService {
   async publicContact(
     eventId: string,
     code: string,
-  ): Promise<{ name: string; whatsAppNumber: string; email: string } | null> {
+  ): Promise<{
+    name: string;
+    whatsAppNumber: string;
+    email: string;
+    extraContacts: { name: string; phone: string }[];
+  } | null> {
     const normalized = String(code ?? "").trim().toUpperCase();
     if (!/^[A-Z0-9]{4,12}$/.test(normalized)) return null;
     if (!Types.ObjectId.isValid(String(eventId ?? ""))) return null;
@@ -341,13 +353,14 @@ export class EventAgentsService {
         referralCode: normalized,
         isActive: true,
       })
-      .select("name whatsAppNumber email")
+      .select("name whatsAppNumber email extraContacts")
       .lean();
     if (!agent) return null;
     return {
       name: String(agent.name || ""),
       whatsAppNumber: String(agent.whatsAppNumber || ""),
       email: String(agent.email || ""),
+      extraContacts: cleanContacts((agent as any).extraContacts),
     };
   }
 
@@ -452,6 +465,18 @@ export class EventAgentsService {
   }
 }
 
+/** Extra contacts as stored: trimmed, number required, capped. */
+function cleanContacts(list: unknown): { name: string; phone: string }[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((c: any) => ({
+      name: String(c?.name ?? "").trim().slice(0, 80),
+      phone: String(c?.phone ?? "").trim(),
+    }))
+    .filter((c) => c.phone)
+    .slice(0, MAX_EXTRA_CONTACTS);
+}
+
 function toView(a: any, linkBase: string): EventAgentView {
   const maxUses = Number(a?.maxUses) || 0;
   const usedCount = Number(a?.usedCount) || 0;
@@ -460,6 +485,7 @@ function toView(a: any, linkBase: string): EventAgentView {
     name: String(a?.name ?? ""),
     whatsAppNumber: String(a?.whatsAppNumber ?? ""),
     email: String(a?.email ?? ""),
+    extraContacts: cleanContacts(a?.extraContacts),
     referralCode: String(a?.referralCode ?? ""),
     maxUses,
     usedCount,

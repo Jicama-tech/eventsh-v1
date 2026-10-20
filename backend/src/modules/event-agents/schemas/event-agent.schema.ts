@@ -39,6 +39,17 @@ export class EventAgent {
   email: string;
 
   /**
+   * More people to reach through this agent — sub-agents, a partner, an
+   * assistant — each a name and a number. Shown with the agent on the
+   * eventfront's "Contact Your Agent" card; never used for sharing the link.
+   */
+  @Prop({
+    type: [{ _id: false, name: { type: String, default: "" }, phone: String }],
+    default: [],
+  })
+  extraContacts: { name: string; phone: string }[];
+
+  /**
    * 7 uppercase letters/digits without the ambiguous ones, unique across
    * every event agent AND kept distinct from operator codes (the generator
    * checks both), since `?ref=` carries one or the other.

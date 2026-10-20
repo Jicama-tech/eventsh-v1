@@ -36,12 +36,17 @@ import { isLikelyPhone, phoneDigits } from "@/lib/phone";
 
 const apiURL = __API_URL__;
 
+/** One more person reachable through an agent (a sub-agent, an assistant). */
+export type AgentContact = { name: string; phone: string };
+
 /** Mirrors EventAgentView in backend/src/modules/event-agents. */
 export type EventAgentView = {
   id: string;
   name: string;
   whatsAppNumber: string;
   email: string;
+  /** Sub-agents / more numbers, shown together on the agent's contact card. */
+  extraContacts: AgentContact[];
   referralCode: string;
   /** 0 = unlimited. */
   maxUses: number;
@@ -62,11 +67,43 @@ export type QueuedEventAgent = {
   whatsAppNumber: string;
   email: string;
   maxUses: number;
+  extraContacts: AgentContact[];
 };
 
-type Draft = { name: string; whatsAppNumber: string; email: string; maxUses: string };
+type Draft = {
+  name: string;
+  whatsAppNumber: string;
+  email: string;
+  maxUses: string;
+  extraContacts: AgentContact[];
+};
 
-const EMPTY_DRAFT: Draft = { name: "", whatsAppNumber: "", email: "", maxUses: "" };
+const EMPTY_DRAFT: Draft = {
+  name: "",
+  whatsAppNumber: "",
+  email: "",
+  maxUses: "",
+  extraContacts: [],
+};
+
+/** Rows with a number, trimmed — what is sent and stored. */
+function cleanContacts(rows: AgentContact[]): AgentContact[] {
+  return rows
+    .map((c) => ({ name: c.name.trim(), phone: c.phone.trim() }))
+    .filter((c) => c.phone);
+}
+
+/** A problem with the extra-contact rows, or null. A row needs its number. */
+function contactsProblem(rows: AgentContact[]): string | null {
+  for (const c of rows) {
+    const phone = c.phone.trim();
+    if (!phone && !c.name.trim()) continue; // an untouched blank row
+    if (!phone || !isLikelyPhone(phone)) {
+      return t("Enter each extra contact's number with its country code, e.g. +91 98765 43210.");
+    }
+  }
+  return null;
+}
 
 function authHeaders(json = false): Record<string, string> {
   const token = sessionStorage.getItem("token");
@@ -112,7 +149,7 @@ function draftProblem(d: Draft): string | null {
   if (max && (!/^\d+$/.test(max) || Number(max) > 1_000_000)) {
     return t("Max uses must be a whole number (0 = unlimited).");
   }
-  return null;
+  return contactsProblem(d.extraContacts);
 }
 
 /** POST the agents queued while the event was being created. Used by the
@@ -133,6 +170,7 @@ export async function createQueuedEventAgents(
           whatsAppNumber: q.whatsAppNumber || undefined,
           email: q.email || undefined,
           maxUses: q.maxUses || 0,
+          extraContacts: q.extraContacts?.length ? q.extraContacts : undefined,
         }),
       });
       if (res.ok) created += 1;
@@ -142,6 +180,66 @@ export async function createQueuedEventAgents(
     }
   }
   return { created, failed };
+}
+
+/** Name + number rows for an agent's sub-agents / extra contacts. */
+function ContactRows({
+  rows,
+  onChange,
+  idPrefix,
+  disabled,
+}: {
+  rows: AgentContact[];
+  onChange: (rows: AgentContact[]) => void;
+  idPrefix: string;
+  disabled?: boolean;
+}) {
+  const set = (i: number, patch: Partial<AgentContact>) =>
+    onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <div className="space-y-2">
+      {rows.map((r, i) => (
+        <div key={i} className="grid gap-2 rounded-md border border-border bg-background p-2 md:grid-cols-[1fr_1fr_auto]">
+          <Input
+            value={r.name}
+            maxLength={80}
+            disabled={disabled}
+            onChange={(e) => set(i, { name: e.target.value })}
+            placeholder={t("Name (e.g. Rahul — sub-agent)")}
+            aria-label={t("Contact name")}
+          />
+          <PhoneField
+            id={`${idPrefix}-phone-${i}`}
+            format="e164"
+            value={r.phone}
+            onChange={(val) => set(i, { phone: val })}
+            placeholder="+91 98765 43210"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="text-red-600 dark:text-red-400"
+            disabled={disabled}
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+            aria-label={t("Remove this contact")}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled || rows.length >= 20}
+        onClick={() => onChange([...rows, { name: "", phone: "" }])}
+      >
+        <Plus className="h-4 w-4" />
+        {t("Add contact")}
+      </Button>
+    </div>
+  );
 }
 
 /**
@@ -180,6 +278,8 @@ export function EventAgentsTab({
   const [confirm, setConfirm] = useState<{ kind: "delete" | "regenerate"; agent: EventAgentView } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [maxDraft, setMaxDraft] = useState<Record<string, string>>({});
+  // Existing agents whose extra contacts are being edited: agent id → rows.
+  const [contactEdit, setContactEdit] = useState<Record<string, AgentContact[]>>({});
 
   const mountedRef = useRef(false);
   useEffect(() => {
@@ -242,6 +342,7 @@ export function EventAgentsTab({
       whatsAppNumber: draft.whatsAppNumber.trim(),
       email: draft.email.trim().toLowerCase(),
       maxUses: Number(draft.maxUses.trim() || 0),
+      extraContacts: cleanContacts(draft.extraContacts),
     };
     if (!live) {
       setQueued((q) => [...q, payload]);
@@ -258,6 +359,7 @@ export function EventAgentsTab({
           whatsAppNumber: payload.whatsAppNumber || undefined,
           email: payload.email || undefined,
           maxUses: payload.maxUses,
+          extraContacts: payload.extraContacts,
         }),
       });
       const body = await res.json().catch(() => null);
@@ -282,7 +384,7 @@ export function EventAgentsTab({
 
   // ---- per-agent actions ------------------------------------------------
 
-  const patch = async (agent: EventAgentView, changes: Partial<Pick<EventAgentView, "maxUses" | "isActive">>) => {
+  const patch = async (agent: EventAgentView, changes: Partial<Pick<EventAgentView, "maxUses" | "isActive" | "extraContacts">>) => {
     if (!eventId || busy) return;
     setBusy(agent.id);
     try {
@@ -472,6 +574,17 @@ export function EventAgentsTab({
               />
             </div>
           </div>
+          <div className="mt-3 space-y-1.5">
+            <Label>{t("Sub-agents / more contacts")}</Label>
+            <p className="text-xs text-muted-foreground">
+              {t("Add more people to reach through this agent, each with a name and a number. They all show together on the agent's contact card.")}
+            </p>
+            <ContactRows
+              rows={draft.extraContacts}
+              onChange={(rows) => setDraft((d) => ({ ...d, extraContacts: rows }))}
+              idPrefix="agent-new"
+            />
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button type="button" onClick={() => void add()} disabled={adding}>
               {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -497,6 +610,11 @@ export function EventAgentsTab({
                     {" · "}
                     {q.maxUses > 0 ? t("{max} uses", { max: q.maxUses }) : t("unlimited uses")}
                   </p>
+                  {q.extraContacts?.length > 0 && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {q.extraContacts.map((c) => [c.name, c.phone].filter(Boolean).join(" ")).join(" · ")}
+                    </p>
+                  )}
                 </div>
                 <Badge variant="outline">{t("Code on save")}</Badge>
                 <Button
@@ -560,6 +678,69 @@ export function EventAgentsTab({
                       <p className="text-xs text-muted-foreground">
                         {[a.whatsAppNumber, a.email].filter(Boolean).join(" · ") || t("No contact details")}
                       </p>
+                      {contactEdit[a.id] ? (
+                        <div className="space-y-2 pt-2">
+                          <Label className="text-xs">{t("Sub-agents / more contacts")}</Label>
+                          <ContactRows
+                            rows={contactEdit[a.id]}
+                            onChange={(rows) => setContactEdit((m) => ({ ...m, [a.id]: rows }))}
+                            idPrefix={`agent-${a.id}`}
+                            disabled={rowBusy}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={rowBusy}
+                              onClick={() => {
+                                const rows = contactEdit[a.id];
+                                const problem = contactsProblem(rows);
+                                if (problem) {
+                                  toast({ duration: 5000, variant: "destructive", title: t("Check the contacts"), description: problem });
+                                  return;
+                                }
+                                void patch(a, { extraContacts: cleanContacts(rows) }).then(() =>
+                                  setContactEdit((m) => {
+                                    const { [a.id]: _drop, ...rest } = m;
+                                    return rest;
+                                  }),
+                                );
+                              }}
+                            >
+                              {t("Save contacts")}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={rowBusy}
+                              onClick={() =>
+                                setContactEdit((m) => {
+                                  const { [a.id]: _drop, ...rest } = m;
+                                  return rest;
+                                })
+                              }
+                            >
+                              {t("Cancel")}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                          {(a.extraContacts || []).map((c, i) => (
+                            <span key={i} className="text-xs text-muted-foreground">
+                              {[c.name, c.phone].filter(Boolean).join(" · ")}
+                            </span>
+                          ))}
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-primary hover:underline"
+                            onClick={() => setContactEdit((m) => ({ ...m, [a.id]: (a.extraContacts || []).map((c) => ({ ...c })) }))}
+                          >
+                            {(a.extraContacts || []).length ? t("Edit sub-agents / contacts") : t("+ Add sub-agents / contacts")}
+                          </button>
+                        </div>
+                      )}
                       <div className="flex flex-wrap items-center gap-2 pt-1">
                         <span className="text-xs text-muted-foreground">{t("Referral code")}</span>
                         <code className="rounded bg-muted px-2 py-0.5 font-mono text-sm tracking-wider">

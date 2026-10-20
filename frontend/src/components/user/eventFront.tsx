@@ -612,6 +612,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     name: string;
     whatsAppNumber: string;
     email: string;
+    extraContacts?: { name: string; phone: string }[];
   } | null>(null);
   useEffect(() => {
     const code = getReferralCode();
@@ -5288,6 +5289,47 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </a>
               </div>
             )}
+            {/* Sub-agents / more contacts the organizer listed with this
+                agent — each with its own name, call and WhatsApp links. */}
+            {(referralAgent.extraContacts || []).map((c, i) => {
+              const num = String(c.phone || "").trim();
+              const d = num.replace(/\D/g, "");
+              if (!num) return null;
+              return (
+                <div key={`xc-${i}`} className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                    <User className="h-3.5 w-3.5 text-gray-400" />
+                  </div>
+                  <div className="min-w-0">
+                    {c.name && (
+                      <p className="text-sm font-semibold text-gray-800 truncate">
+                        {c.name}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <a
+                        href={`tel:${num.replace(/[^\d+]/g, "")}`}
+                        className="text-sm font-medium hover:underline"
+                        style={{ color: design?.secondaryColor || "#ef4444" }}
+                      >
+                        {num}
+                      </a>
+                      {d && (
+                        <a
+                          href={`https://wa.me/${d}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-green-600 transition-colors"
+                        >
+                          <FaWhatsapp className="h-3 w-3 text-green-500" />
+                          WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
