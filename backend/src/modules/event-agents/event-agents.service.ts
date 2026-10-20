@@ -110,7 +110,12 @@ export class EventAgentsService {
     if (!isAdmin && (!caller || caller !== owner)) {
       throw new ForbiddenException("This event belongs to another organizer.");
     }
-    return event as { _id: Types.ObjectId; title?: string; organizer: Types.ObjectId };
+    return event as {
+      _id: Types.ObjectId;
+      title?: string;
+      slug?: string;
+      organizer: Types.ObjectId;
+    };
   }
 
   private async ownedAgent(eventId: string, agentId: string, actor: Actor) {
@@ -132,7 +137,7 @@ export class EventAgentsService {
     const event = await this.ownedEvent(eventId, actor);
     const [agents, linkBase] = await Promise.all([
       this.agentModel.find({ eventId: event._id }).sort({ createdAt: -1 }).lean(),
-      this.eventLink(String(event.organizer), String(event._id)),
+      this.eventLink(String(event.organizer), event),
     ]);
     return agents.map((a) => toView(a, linkBase));
   }
@@ -169,7 +174,7 @@ export class EventAgentsService {
     });
     return toView(
       doc.toObject(),
-      await this.eventLink(String(event.organizer), String(event._id)),
+      await this.eventLink(String(event.organizer), event),
     );
   }
 
@@ -193,7 +198,7 @@ export class EventAgentsService {
     await agent.save();
     return toView(
       agent.toObject(),
-      await this.eventLink(String(event.organizer), String(event._id)),
+      await this.eventLink(String(event.organizer), event),
     );
   }
 
@@ -213,7 +218,7 @@ export class EventAgentsService {
     await agent.save();
     return toView(
       agent.toObject(),
-      await this.eventLink(String(event.organizer), String(event._id)),
+      await this.eventLink(String(event.organizer), event),
     );
   }
 
@@ -240,7 +245,7 @@ export class EventAgentsService {
     const organizerName = String(
       organizer?.organizationName || organizer?.name || emailBrand().name,
     );
-    const shareLink = `${await this.eventLink(String(event.organizer), String(event._id))}?ref=${agent.referralCode}`;
+    const shareLink = `${await this.eventLink(String(event.organizer), event)}?ref=${agent.referralCode}`;
     const channel = dto.channel || "both";
     const note = String(dto.note || "").trim();
     const eventTitle = String(event.title || "the event");
@@ -387,12 +392,20 @@ export class EventAgentsService {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   /**
-   * "https://eventsh.com/<organizer slug>/events/<event id>" — the same
-   * public route the stall and ticket emails link to (stalls.service.ts's
+   * "https://eventsh.com/<organizer slug>/events/<event slug, else id>" — the
+   * same public route the stall and ticket emails link to (stalls.service.ts's
    * buildEventFrontUrl), so the agent's link opens the eventfront page that
-   * captures `?ref=`.
+   * captures `?ref=`. The event's own slug (set on the event form) is used
+   * when it has one, like the organizer's share links; the route resolves a
+   * slug or an id.
    */
-  private async eventLink(organizerId: string, eventId: string): Promise<string> {
+  private async eventLink(
+    organizerId: string,
+    event: { _id: any; slug?: string },
+  ): Promise<string> {
+    const eventId = encodeURIComponent(
+      String(event?.slug || "").trim() || String(event._id),
+    );
     const fe = (process.env.FRONTEND_BASE_URL || "https://eventsh.com").replace(/\/+$/, "");
     try {
       const store = await this.storeModel
