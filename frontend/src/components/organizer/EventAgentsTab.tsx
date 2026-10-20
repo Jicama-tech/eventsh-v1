@@ -7,6 +7,7 @@ import {
   Link2,
   Loader2,
   Mail,
+  Pencil,
   Plus,
   RefreshCw,
   Send,
@@ -182,6 +183,27 @@ export async function createQueuedEventAgents(
   return { created, failed };
 }
 
+/** The fields of an existing agent being edited. */
+type AgentEditDraft = {
+  name: string;
+  whatsAppNumber: string;
+  email: string;
+  extraContacts: AgentContact[];
+};
+
+/** Validate an edit the way the API will. */
+function editProblem(d: AgentEditDraft): string | null {
+  if (!d.name.trim()) return t("Enter the agent's name.");
+  const wa = d.whatsAppNumber.trim();
+  const email = d.email.trim();
+  if (!wa && !email) return t("Add a WhatsApp number or an email address, so the link can be sent to the agent.");
+  if (wa && !isLikelyPhone(wa)) {
+    return t("Enter the WhatsApp number with its country code, e.g. +91 98765 43210.");
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return t("Enter a valid email address.");
+  return contactsProblem(d.extraContacts);
+}
+
 /** Name + number rows for an agent's sub-agents / extra contacts. */
 function ContactRows({
   rows,
@@ -279,7 +301,7 @@ export function EventAgentsTab({
   const [copied, setCopied] = useState<string | null>(null);
   const [maxDraft, setMaxDraft] = useState<Record<string, string>>({});
   // Existing agents whose extra contacts are being edited: agent id → rows.
-  const [contactEdit, setContactEdit] = useState<Record<string, AgentContact[]>>({});
+  const [editing, setEditing] = useState<Record<string, AgentEditDraft>>({});
 
   const mountedRef = useRef(false);
   useEffect(() => {
@@ -384,8 +406,13 @@ export function EventAgentsTab({
 
   // ---- per-agent actions ------------------------------------------------
 
-  const patch = async (agent: EventAgentView, changes: Partial<Pick<EventAgentView, "maxUses" | "isActive" | "extraContacts">>) => {
-    if (!eventId || busy) return;
+  const patch = async (
+    agent: EventAgentView,
+    changes: Partial<
+      Pick<EventAgentView, "maxUses" | "isActive" | "extraContacts" | "name" | "whatsAppNumber" | "email">
+    >,
+  ): Promise<boolean> => {
+    if (!eventId || busy) return false;
     setBusy(agent.id);
     try {
       const res = await fetch(
@@ -393,17 +420,45 @@ export function EventAgentsTab({
         { method: "PATCH", headers: authHeaders(true), body: JSON.stringify(changes) },
       );
       const body = await res.json().catch(() => null);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) return false;
       if (res.ok && isAgent(body)) {
         setAgents((prev) => (prev ?? []).map((a) => (a.id === body.id ? body : a)));
-      } else {
-        failToast(t("That did not work"), body);
-        void load();
+        return true;
       }
+      failToast(t("That did not work"), body);
+      void load();
+      return false;
     } catch {
       if (mountedRef.current) failToast(t("That did not work"), null);
+      return false;
     } finally {
       if (mountedRef.current) setBusy(null);
+    }
+  };
+
+  const stopEditing = (id: string) =>
+    setEditing((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+
+  const saveEdit = async (agent: EventAgentView) => {
+    const d = editing[agent.id];
+    if (!d) return;
+    const problem = editProblem(d);
+    if (problem) {
+      toast({ duration: 5000, variant: "destructive", title: t("Check the agent details"), description: problem });
+      return;
+    }
+    const ok = await patch(agent, {
+      name: d.name.trim(),
+      whatsAppNumber: d.whatsAppNumber.trim(),
+      email: d.email.trim().toLowerCase(),
+      extraContacts: cleanContacts(d.extraContacts),
+    });
+    if (ok && mountedRef.current) {
+      stopEditing(agent.id);
+      toast({ duration: 3000, title: t("Agent updated") });
     }
   };
 
@@ -662,84 +717,101 @@ export function EventAgentsTab({
               const digits = a.whatsAppNumber ? waDigits(a.whatsAppNumber) : null;
               const exhausted = a.maxUses > 0 && a.usedCount >= a.maxUses;
               const rowBusy = busy === a.id;
+              const edit = editing[a.id];
+              const startEditing = (agent: EventAgentView) =>
+                setEditing((m) => ({
+                  ...m,
+                  [agent.id]: {
+                    name: agent.name,
+                    whatsAppNumber: agent.whatsAppNumber,
+                    email: agent.email,
+                    extraContacts: (agent.extraContacts || []).map((c) => ({ ...c })),
+                  },
+                }));
               return (
                 <li key={a.id} className="rounded-lg border border-border p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{a.name}</p>
-                        {!a.isActive && <Badge variant="outline">{t("Paused")}</Badge>}
-                        {exhausted && (
-                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                            {t("Limit reached")}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {[a.whatsAppNumber, a.email].filter(Boolean).join(" · ") || t("No contact details")}
-                      </p>
-                      {contactEdit[a.id] ? (
-                        <div className="space-y-2 pt-2">
-                          <Label className="text-xs">{t("Sub-agents / more contacts")}</Label>
-                          <ContactRows
-                            rows={contactEdit[a.id]}
-                            onChange={(rows) => setContactEdit((m) => ({ ...m, [a.id]: rows }))}
-                            idPrefix={`agent-${a.id}`}
-                            disabled={rowBusy}
-                          />
+                      {edit ? (
+                        <div className="space-y-3 pb-1">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`agent-edit-name-${a.id}`}>{t("Agent name")} *</Label>
+                              <Input
+                                id={`agent-edit-name-${a.id}`}
+                                value={edit.name}
+                                maxLength={80}
+                                disabled={rowBusy}
+                                onChange={(e) => setEditing((m) => ({ ...m, [a.id]: { ...edit, name: e.target.value } }))}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`agent-edit-wa-${a.id}`}>{t("WhatsApp number")}</Label>
+                              <PhoneField
+                                id={`agent-edit-wa-${a.id}`}
+                                format="e164"
+                                value={edit.whatsAppNumber}
+                                onChange={(val) => setEditing((m) => ({ ...m, [a.id]: { ...edit, whatsAppNumber: val } }))}
+                                placeholder="+91 98765 43210"
+                              />
+                            </div>
+                            <div className="space-y-1.5 md:col-span-2">
+                              <Label htmlFor={`agent-edit-email-${a.id}`}>{t("Gmail / email")}</Label>
+                              <Input
+                                id={`agent-edit-email-${a.id}`}
+                                type="email"
+                                value={edit.email}
+                                maxLength={120}
+                                disabled={rowBusy}
+                                onChange={(e) => setEditing((m) => ({ ...m, [a.id]: { ...edit, email: e.target.value } }))}
+                                placeholder="agent@gmail.com"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">{t("Sub-agents / more contacts")}</Label>
+                            <ContactRows
+                              rows={edit.extraContacts}
+                              onChange={(rows) => setEditing((m) => ({ ...m, [a.id]: { ...edit, extraContacts: rows } }))}
+                              idPrefix={`agent-${a.id}`}
+                              disabled={rowBusy}
+                            />
+                          </div>
                           <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              disabled={rowBusy}
-                              onClick={() => {
-                                const rows = contactEdit[a.id];
-                                const problem = contactsProblem(rows);
-                                if (problem) {
-                                  toast({ duration: 5000, variant: "destructive", title: t("Check the contacts"), description: problem });
-                                  return;
-                                }
-                                void patch(a, { extraContacts: cleanContacts(rows) }).then(() =>
-                                  setContactEdit((m) => {
-                                    const { [a.id]: _drop, ...rest } = m;
-                                    return rest;
-                                  }),
-                                );
-                              }}
-                            >
-                              {t("Save contacts")}
+                            <Button type="button" size="sm" disabled={rowBusy} onClick={() => void saveEdit(a)}>
+                              {rowBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                              {t("Save changes")}
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              disabled={rowBusy}
-                              onClick={() =>
-                                setContactEdit((m) => {
-                                  const { [a.id]: _drop, ...rest } = m;
-                                  return rest;
-                                })
-                              }
-                            >
+                            <Button type="button" size="sm" variant="ghost" disabled={rowBusy} onClick={() => stopEditing(a.id)}>
                               {t("Cancel")}
                             </Button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
-                          {(a.extraContacts || []).map((c, i) => (
-                            <span key={i} className="text-xs text-muted-foreground">
-                              {[c.name, c.phone].filter(Boolean).join(" · ")}
-                            </span>
-                          ))}
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-primary hover:underline"
-                            onClick={() => setContactEdit((m) => ({ ...m, [a.id]: (a.extraContacts || []).map((c) => ({ ...c })) }))}
-                          >
-                            {(a.extraContacts || []).length ? t("Edit sub-agents / contacts") : t("+ Add sub-agents / contacts")}
-                          </button>
-                        </div>
+                        <>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{a.name}</p>
+                            {!a.isActive && <Badge variant="outline">{t("Paused")}</Badge>}
+                            {exhausted && (
+                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                {t("Limit reached")}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {[a.whatsAppNumber, a.email].filter(Boolean).join(" · ") || t("No contact details")}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                            {(a.extraContacts || []).map((c, i) => (
+                              <span key={i} className="text-xs text-muted-foreground">
+                                {[c.name, c.phone].filter(Boolean).join(" · ")}
+                              </span>
+                            ))}
+                            <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => startEditing(a)}>
+                              {(a.extraContacts || []).length ? t("Edit sub-agents / contacts") : t("+ Add sub-agents / contacts")}
+                            </button>
+                          </div>
+                        </>
                       )}
                       <div className="flex flex-wrap items-center gap-2 pt-1">
                         <span className="text-xs text-muted-foreground">{t("Referral code")}</span>
@@ -839,6 +911,10 @@ export function EventAgentsTab({
                       </a>
                     )}
                     <span className="flex-1" />
+                    <Button type="button" variant="ghost" size="sm" disabled={rowBusy || !!edit} onClick={() => startEditing(a)}>
+                      <Pencil className="h-4 w-4" />
+                      {t("Edit")}
+                    </Button>
                     <Button type="button" variant="ghost" size="sm" disabled={rowBusy} onClick={() => setConfirm({ kind: "regenerate", agent: a })}>
                       <RefreshCw className="h-4 w-4" />
                       {t("New code")}
