@@ -769,13 +769,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // download / finish-payment actions and a "book new" button) or drop the
   // visitor straight onto the seat picker with their identity pre-filled.
   const [showRoundTableAuth, setShowRoundTableAuth] = useState(false);
-  const [roundTableGoogleLoading, setRoundTableGoogleLoading] =
-    useState(false);
+  const [roundTableGoogleLoading, setRoundTableGoogleLoading] = useState(false);
   const roundTablePopupRef = useRef<Window | null>(null);
   const [roundTableAuthedEmail, setRoundTableAuthedEmail] = useState("");
-  const [roundTableBookingList, setRoundTableBookingList] = useState<any[]>(
-    [],
-  );
+  const [roundTableBookingList, setRoundTableBookingList] = useState<any[]>([]);
   const [showRoundTableBookingList, setShowRoundTableBookingList] =
     useState(false);
   const [downloadingRtTicketId, setDownloadingRtTicketId] = useState<
@@ -972,9 +969,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   ] = useState(false);
   // "auth" (Google sign-in gate) → "form" (details). Mirrors the Rent-a-
   // Stall / Become-a-Sponsor flows' Google-first pattern.
-  const [scheduledSpaceStep, setScheduledSpaceStep] = useState<
-    "auth" | "form"
-  >("auth");
+  const [scheduledSpaceStep, setScheduledSpaceStep] = useState<"auth" | "form">(
+    "auth",
+  );
   const [scheduledSpaceGoogleLoading, setScheduledSpaceGoogleLoading] =
     useState(false);
   const [downloadingScheduledSpaceTicket, setDownloadingScheduledSpaceTicket] =
@@ -1000,10 +997,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Free/charity spaces have no payment page to route to — slot selection
   // submits and completes the booking directly, so this tracks that
   // in-flight request instead of the instant navigate() the paid path uses.
-  const [
-    scheduledSpaceSlotsSubmitting,
-    setScheduledSpaceSlotsSubmitting,
-  ] = useState(false);
+  const [scheduledSpaceSlotsSubmitting, setScheduledSpaceSlotsSubmitting] =
+    useState(false);
   const [scheduledSpacesAvailable, setScheduledSpacesAvailable] = useState<
     any[]
   >([]);
@@ -1087,9 +1082,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
     const want = existingScheduledSpaceRequest?.facilityTypeRequested;
     if (!want) return scheduledSpacesAvailable;
-    return scheduledSpacesAvailable.filter(
-      (s: any) => s.facilityType === want,
-    );
+    return scheduledSpacesAvailable.filter((s: any) => s.facilityType === want);
   }, [
     scheduledSpacesAvailable,
     existingScheduledSpaceRequest,
@@ -2130,7 +2123,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
     handleScheduledSpaceClick();
     if (space.facilityType) {
-      setScheduledSpaceForm((p) => ({ ...p, facilityType: space.facilityType }));
+      setScheduledSpaceForm((p) => ({
+        ...p,
+        facilityType: space.facilityType,
+      }));
     }
   };
 
@@ -2216,7 +2212,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         `${apiURL}/scheduled-spaces/check-request/${(eventData as any)?._id}/${encodeURIComponent(email)}`,
       );
       const result = await res.json().catch(() => null);
-      if (res.ok && Array.isArray(result?.requests) && result.requests.length > 1) {
+      if (
+        res.ok &&
+        Array.isArray(result?.requests) &&
+        result.requests.length > 1
+      ) {
         // More than one request on record for this email — let them pick
         // which to view, or start a new one, rather than guessing.
         setScheduledSpaceRequestList(result.requests);
@@ -2282,7 +2282,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     let sawPopupClosed = false;
 
     const accept = (rawEmail: string, name?: string) => {
-      const clean = String(rawEmail || "").trim().toLowerCase();
+      const clean = String(rawEmail || "")
+        .trim()
+        .toLowerCase();
       setScheduledSpaceGoogleLoading(false);
       if (!clean) {
         toast({
@@ -2353,7 +2355,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     let sawPopupClosed = false;
 
     const accept = (rawEmail: string, name?: string) => {
-      const clean = String(rawEmail || "").trim().toLowerCase();
+      const clean = String(rawEmail || "")
+        .trim()
+        .toLowerCase();
       setRoundTableGoogleLoading(false);
       if (!clean) {
         toast({
@@ -2466,7 +2470,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               String(scheduledSpacePhoneCountry?.dialCode ?? "")
               ? toE164(scheduledSpaceForm.phone)
               : undefined,
-          whatsappNumber: toE164(scheduledSpaceForm.whatsappNumber) || undefined,
+          whatsappNumber:
+            toE164(scheduledSpaceForm.whatsappNumber) || undefined,
           facilityTypeRequested: scheduledSpaceForm.facilityType || undefined,
           purpose: scheduledSpaceForm.purpose || undefined,
           organization: scheduledSpaceForm.organization || undefined,
@@ -2512,9 +2517,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       // The backend already leaves "Not for sale" facilities out of this
       // list; filter again so an older server can't surface one as bookable.
       setScheduledSpacesAvailable(
-        (result?.data?.spaces || []).filter(
-          (s: any) => s?.forSale !== false,
-        ),
+        (result?.data?.spaces || []).filter((s: any) => s?.forSale !== false),
       );
     } catch {
       setScheduledSpacesAvailable([]);
@@ -3335,7 +3338,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       ];
       const email = speakerFormData.email || speakerAuthedEmail;
       const organizerId = String(
-        (eventData as any)?.organizer?._id || (eventData as any)?.organizer || "",
+        (eventData as any)?.organizer?._id ||
+          (eventData as any)?.organizer ||
+          "",
       );
 
       let res: Response;
@@ -3501,7 +3506,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // routes to the status screen; otherwise opens a blank form with the
   // verified email locked in.
   const lookupWorkshopHostByEmail = async (email: string, name?: string) => {
-    const clean = String(email || "").trim().toLowerCase();
+    const clean = String(email || "")
+      .trim()
+      .toLowerCase();
     if (!clean) {
       setWorkshopHostGoogleLoading(false);
       toast({
@@ -3658,7 +3665,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     setWorkshopHostSubmitting(true);
     try {
       const organizerId = String(
-        (eventData as any)?.organizer?._id || (eventData as any)?.organizer || "",
+        (eventData as any)?.organizer?._id ||
+          (eventData as any)?.organizer ||
+          "",
       );
       const eid = dbEventId;
       const email = workshopHostFormData.hostEmail || workshopHostAuthedEmail;
@@ -3838,8 +3847,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             p.previousSpeakingExperience ||
             profile.previousSpeakingExperience ||
             "",
-          equipmentNeeded:
-            p.equipmentNeeded || profile.equipmentNeeded || "",
+          equipmentNeeded: p.equipmentNeeded || profile.equipmentNeeded || "",
           socialLinks: {
             linkedin:
               p.socialLinks?.linkedin || profile.socialLinks?.linkedin || "",
@@ -5762,8 +5770,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     if (stallOn("brandName")) req(blank(d.brandName), "Brand Name");
     req(blank(d.shopName), "Registered Business Name");
     if (!shopkeeperExists) req(blank(d.email), "Primary Email");
-    if (stallOn("businessEmail"))
-      req(blank(d.businessEmail), "Business Email");
+    if (stallOn("businessEmail")) req(blank(d.businessEmail), "Business Email");
     if (stallOn("whatsappNumber"))
       req(blank(d.whatsappNumber), "WhatsApp Number");
     if (stallOn("phone")) req(blank(d.phone), "Phone Number");
@@ -5773,10 +5780,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       req(!d.noOfOperators || Number(d.noOfOperators) < 1, "No. of Operators");
     if (stallOn("registrationNumber"))
       req(blank(d.registrationNumber), "Registration Number");
-    if (stallOn("faceBookLink"))
-      req(blank(d.faceBookLink), "Facebook Link");
-    if (stallOn("instagramLink"))
-      req(blank(d.instagramLink), "Instagram Link");
+    if (stallOn("faceBookLink")) req(blank(d.faceBookLink), "Facebook Link");
+    if (stallOn("instagramLink")) req(blank(d.instagramLink), "Instagram Link");
     if (stallOn("description"))
       req(blank(d.description), "Business, Products & Brand Description");
     if (stallOn("refundPaymentDescription"))
@@ -5788,8 +5793,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     // satisfies the requirement (no forced re-upload); a new file overrides it.
     if (stallOn("registrationImage"))
       req(!regImageFile && !regImagePreview, "Business Registration Document");
-    if (stallOn("companyLogo"))
-      req(!logoFile && !logoPreview, "Company Logo");
+    if (stallOn("companyLogo")) req(!logoFile && !logoPreview, "Company Logo");
     if (stallOn("productImage"))
       req(
         productFiles.length < 1 && existingProductImages.length < 1,
@@ -6195,12 +6199,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       (eventData as any)?.venueConfig?.map((c: any) => c.id)?.[
         currentLayoutIndex
       ] || "default";
-    const layoutSeats: any[] = (
-      (eventData as any)?.venueSeats || []
-    ).filter((s: any) =>
-      s?.venueConfigId && s.venueConfigId !== "default"
-        ? s.venueConfigId === currentCfgId
-        : currentLayoutIndex === 0,
+    const layoutSeats: any[] = ((eventData as any)?.venueSeats || []).filter(
+      (s: any) =>
+        s?.venueConfigId && s.venueConfigId !== "default"
+          ? s.venueConfigId === currentCfgId
+          : currentLayoutIndex === 0,
     );
     const rowDefs: any[] = (eventData as any)?.seatRowTemplates || [];
     // Seats are self-priced via their own row template — no VisitorType
@@ -7103,9 +7106,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               ? `rotate(${seat.rotation}deg)`
               : undefined,
           }}
-          title={
-            seat.name || `${row?.name || "Seat"}${seat.seatNumber}`
-          }
+          title={seat.name || `${row?.name || "Seat"}${seat.seatNumber}`}
         >
           <span className="px-0.5 truncate">
             {seat.name || seat.seatNumber}
@@ -8040,263 +8041,275 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </div>
                     ) : (
                       <>
-                    {!cropCfg?.hasMainStage && (
-                      <div className="relative mx-auto max-w-md mb-1">
-                        <div
-                          className="absolute inset-x-6 -bottom-5 h-10 blur-xl opacity-60 pointer-events-none"
-                          style={{
-                            background: `radial-gradient(ellipse at center, ${design?.primaryColor || "#f97316"}55, transparent 75%)`,
-                          }}
-                        />
-                        <div className="relative rounded-t-[100px] bg-gradient-to-b from-gray-700 via-gray-800 to-gray-900 text-white text-center text-xs sm:text-sm font-semibold tracking-[0.3em] py-2.5 sm:py-3 uppercase shadow-[0_10px_24px_-8px_rgba(0,0,0,0.45)] border-b-2 border-white/10">
-                          {seatPickerStageLabel}
-                        </div>
-                      </div>
-                    )}
-                    {(() => {
-                      // As big as this layout's own seat spacing safely
-                      // allows (up to 32, bumped up from a flat 28) —
-                      // computed per-layout rather than a fixed constant,
-                      // because a curved/tightly-packed row (e.g. one drawn
-                      // with the curve tool) can have much closer
-                      // seat-to-seat spacing than a straight row, and a
-                      // flat "bigger" constant made those seats visibly
-                      // overlap. Falls back to 28 with no seats placed yet.
-                      let nearestSeatGap = Infinity;
-                      for (let i = 0; i < seats.length; i++) {
-                        for (let j = i + 1; j < seats.length; j++) {
-                          const d = Math.hypot(
-                            (seats[i].x ?? 0) - (seats[j].x ?? 0),
-                            (seats[i].y ?? 0) - (seats[j].y ?? 0),
-                          );
-                          if (d > 0 && d < nearestSeatGap) nearestSeatGap = d;
-                        }
-                      }
-                      const SEAT_NATURAL =
-                        nearestSeatGap === Infinity
-                          ? 28
-                          : Math.min(32, Math.max(18, nearestSeatGap - 6));
-                      // Zoom into just the area that actually has content
-                      // instead of rendering the organizer's FULL declared
-                      // venue canvas (often much bigger than the seating
-                      // block itself, which used to leave a sea of white
-                      // space around a small cluster of seats). Bounding
-                      // box across every item this map actually draws
-                      // (seats, doors, main stage, non-sellable spaces for
-                      // this layout), padded a bit, becomes the reference
-                      // frame instead of the raw venue width/height — same
-                      // fit-to-width scale technique, just a tighter canvas
-                      // to fit, which reads as "zoomed in".
-                      const CONTENT_PADDING = 26;
-                      const boundsDoors = currentLayoutDoors.filter(
-                        (door: any) => inCrop(door?.x, door?.y),
-                      );
-                      const boundsSpaces = (
-                        venueTables?.[currentLayoutId] || []
-                      ).filter(
-                        (table: any) =>
-                          table.forSale === false &&
-                          inCrop(table.x, table.y),
-                      );
-                      let minX = Infinity;
-                      let minY = Infinity;
-                      let maxX = -Infinity;
-                      let maxY = -Infinity;
-                      const extend = (
-                        x: number,
-                        y: number,
-                        w: number,
-                        h: number,
-                      ) => {
-                        minX = Math.min(minX, x);
-                        minY = Math.min(minY, y);
-                        maxX = Math.max(maxX, x + w);
-                        maxY = Math.max(maxY, y + h);
-                      };
-                      seats.forEach((s: any) =>
-                        extend(s.x || 0, s.y || 0, SEAT_NATURAL, SEAT_NATURAL),
-                      );
-                      boundsDoors.forEach((d: any) =>
-                        extend(
-                          d.x || 0,
-                          d.y || 0,
-                          Number(d.width) > 0 ? Number(d.width) : 50,
-                          Number(d.height) > 0 ? Number(d.height) : 50,
-                        ),
-                      );
-                      boundsSpaces.forEach((t: any) =>
-                        extend(
-                          t.x || 0,
-                          t.y || 0,
-                          t.displayWidth ?? t.width ?? 50,
-                          t.displayHeight ?? t.height ?? 50,
-                        ),
-                      );
-                      // Computed once here (not re-derived inside the render
-                      // block below with a different width reference) so the
-                      // stage's bounding-box contribution and its actual
-                      // rendered position never disagree.
-                      const stageGeom = cropCfg?.hasMainStage
-                        ? {
-                            w: cropCfg?.mainStageWidth ?? 200,
-                            h: cropCfg?.mainStageHeight ?? 60,
-                            x:
-                              cropCfg?.mainStageX ??
-                              ((cropW || 800) -
-                                (cropCfg?.mainStageWidth ?? 200)) /
-                                2,
-                            y: cropCfg?.mainStageY ?? 10,
-                          }
-                        : null;
-                      if (stageGeom) {
-                        extend(
-                          stageGeom.x,
-                          stageGeom.y,
-                          stageGeom.w,
-                          stageGeom.h,
-                        );
-                      }
-                      const hasBounds = minX !== Infinity;
-                      // Offsets shift every item's raw venue-absolute
-                      // coordinate so the tight content box starts right at
-                      // CONTENT_PADDING from the canvas's top-left — same
-                      // small margin on every side now that the row-label
-                      // gutter (a separate reserved strip on the left) has
-                      // been removed entirely, which was the real source of
-                      // the leftover white space on the left.
-                      const offsetX = hasBounds
-                        ? CONTENT_PADDING - minX
-                        : 0;
-                      const offsetY = hasBounds
-                        ? CONTENT_PADDING - minY
-                        : 0;
-                      const venueW = hasBounds
-                        ? maxX - minX + CONTENT_PADDING * 2
-                        : cropW || 800;
-                      const venueH = hasBounds
-                        ? maxY - minY + CONTENT_PADDING * 2
-                        : cropH || 500;
-                      const naturalW = venueW;
-                      const naturalH = venueH;
-                      // Fit-to-width, capped at 1 — the EXACT same technique
-                      // the general Venue Layout map uses (venueDisplayScale
-                      // above): the whole canvas (stage, doors, spaces,
-                      // every seat) renders at its natural size and is
-                      // scaled down as a single CSS transform, so nothing
-                      // can ever overlap — everything shrinks together, in
-                      // lockstep — and the box never needs a horizontal
-                      // scrollbar to show the rest of the seats, matching
-                      // how the Venue Layout tab behaves.
-                      const trueScale =
-                        naturalW > 0
-                          ? Math.min((seatMapWidth / naturalW) * 0.98, 1)
-                          : 1;
-                      const seatSize = SEAT_NATURAL;
-                      return (
-                        <div
-                          ref={setSeatMapEl}
-                          className="overflow-auto rounded-xl mt-3"
-                          style={{ width: "100%" }}
-                        >
-                          <div
-                            className="mx-auto"
-                            style={{
-                              width: naturalW * trueScale,
-                              height: naturalH * trueScale,
-                            }}
-                          >
+                        {!cropCfg?.hasMainStage && (
+                          <div className="relative mx-auto max-w-md mb-1">
                             <div
-                              className="relative"
+                              className="absolute inset-x-6 -bottom-5 h-10 blur-xl opacity-60 pointer-events-none"
                               style={{
-                                width: naturalW,
-                                height: naturalH,
-                                transform: `scale(${trueScale})`,
-                                transformOrigin: "top left",
+                                background: `radial-gradient(ellipse at center, ${design?.primaryColor || "#f97316"}55, transparent 75%)`,
                               }}
+                            />
+                            <div className="relative rounded-t-[100px] bg-gradient-to-b from-gray-700 via-gray-800 to-gray-900 text-white text-center text-xs sm:text-sm font-semibold tracking-[0.3em] py-2.5 sm:py-3 uppercase shadow-[0_10px_24px_-8px_rgba(0,0,0,0.45)] border-b-2 border-white/10">
+                              {seatPickerStageLabel}
+                            </div>
+                          </div>
+                        )}
+                        {(() => {
+                          // As big as this layout's own seat spacing safely
+                          // allows (up to 32, bumped up from a flat 28) —
+                          // computed per-layout rather than a fixed constant,
+                          // because a curved/tightly-packed row (e.g. one drawn
+                          // with the curve tool) can have much closer
+                          // seat-to-seat spacing than a straight row, and a
+                          // flat "bigger" constant made those seats visibly
+                          // overlap. Falls back to 28 with no seats placed yet.
+                          let nearestSeatGap = Infinity;
+                          for (let i = 0; i < seats.length; i++) {
+                            for (let j = i + 1; j < seats.length; j++) {
+                              const d = Math.hypot(
+                                (seats[i].x ?? 0) - (seats[j].x ?? 0),
+                                (seats[i].y ?? 0) - (seats[j].y ?? 0),
+                              );
+                              if (d > 0 && d < nearestSeatGap)
+                                nearestSeatGap = d;
+                            }
+                          }
+                          const SEAT_NATURAL =
+                            nearestSeatGap === Infinity
+                              ? 28
+                              : Math.min(32, Math.max(18, nearestSeatGap - 6));
+                          // Zoom into just the area that actually has content
+                          // instead of rendering the organizer's FULL declared
+                          // venue canvas (often much bigger than the seating
+                          // block itself, which used to leave a sea of white
+                          // space around a small cluster of seats). Bounding
+                          // box across every item this map actually draws
+                          // (seats, doors, main stage, non-sellable spaces for
+                          // this layout), padded a bit, becomes the reference
+                          // frame instead of the raw venue width/height — same
+                          // fit-to-width scale technique, just a tighter canvas
+                          // to fit, which reads as "zoomed in".
+                          const CONTENT_PADDING = 26;
+                          const boundsDoors = currentLayoutDoors.filter(
+                            (door: any) => inCrop(door?.x, door?.y),
+                          );
+                          const boundsSpaces = (
+                            venueTables?.[currentLayoutId] || []
+                          ).filter(
+                            (table: any) =>
+                              table.forSale === false &&
+                              inCrop(table.x, table.y),
+                          );
+                          let minX = Infinity;
+                          let minY = Infinity;
+                          let maxX = -Infinity;
+                          let maxY = -Infinity;
+                          const extend = (
+                            x: number,
+                            y: number,
+                            w: number,
+                            h: number,
+                          ) => {
+                            minX = Math.min(minX, x);
+                            minY = Math.min(minY, y);
+                            maxX = Math.max(maxX, x + w);
+                            maxY = Math.max(maxY, y + h);
+                          };
+                          seats.forEach((s: any) =>
+                            extend(
+                              s.x || 0,
+                              s.y || 0,
+                              SEAT_NATURAL,
+                              SEAT_NATURAL,
+                            ),
+                          );
+                          boundsDoors.forEach((d: any) =>
+                            extend(
+                              d.x || 0,
+                              d.y || 0,
+                              Number(d.width) > 0 ? Number(d.width) : 50,
+                              Number(d.height) > 0 ? Number(d.height) : 50,
+                            ),
+                          );
+                          boundsSpaces.forEach((t: any) =>
+                            extend(
+                              t.x || 0,
+                              t.y || 0,
+                              t.displayWidth ?? t.width ?? 50,
+                              t.displayHeight ?? t.height ?? 50,
+                            ),
+                          );
+                          // Computed once here (not re-derived inside the render
+                          // block below with a different width reference) so the
+                          // stage's bounding-box contribution and its actual
+                          // rendered position never disagree.
+                          const stageGeom = cropCfg?.hasMainStage
+                            ? {
+                                w: cropCfg?.mainStageWidth ?? 200,
+                                h: cropCfg?.mainStageHeight ?? 60,
+                                x:
+                                  cropCfg?.mainStageX ??
+                                  ((cropW || 800) -
+                                    (cropCfg?.mainStageWidth ?? 200)) /
+                                    2,
+                                y: cropCfg?.mainStageY ?? 10,
+                              }
+                            : null;
+                          if (stageGeom) {
+                            extend(
+                              stageGeom.x,
+                              stageGeom.y,
+                              stageGeom.w,
+                              stageGeom.h,
+                            );
+                          }
+                          const hasBounds = minX !== Infinity;
+                          // Offsets shift every item's raw venue-absolute
+                          // coordinate so the tight content box starts right at
+                          // CONTENT_PADDING from the canvas's top-left — same
+                          // small margin on every side now that the row-label
+                          // gutter (a separate reserved strip on the left) has
+                          // been removed entirely, which was the real source of
+                          // the leftover white space on the left.
+                          const offsetX = hasBounds
+                            ? CONTENT_PADDING - minX
+                            : 0;
+                          const offsetY = hasBounds
+                            ? CONTENT_PADDING - minY
+                            : 0;
+                          const venueW = hasBounds
+                            ? maxX - minX + CONTENT_PADDING * 2
+                            : cropW || 800;
+                          const venueH = hasBounds
+                            ? maxY - minY + CONTENT_PADDING * 2
+                            : cropH || 500;
+                          const naturalW = venueW;
+                          const naturalH = venueH;
+                          // Fit-to-width, capped at 1 — the EXACT same technique
+                          // the general Venue Layout map uses (venueDisplayScale
+                          // above): the whole canvas (stage, doors, spaces,
+                          // every seat) renders at its natural size and is
+                          // scaled down as a single CSS transform, so nothing
+                          // can ever overlap — everything shrinks together, in
+                          // lockstep — and the box never needs a horizontal
+                          // scrollbar to show the rest of the seats, matching
+                          // how the Venue Layout tab behaves.
+                          const trueScale =
+                            naturalW > 0
+                              ? Math.min((seatMapWidth / naturalW) * 0.98, 1)
+                              : 1;
+                          const seatSize = SEAT_NATURAL;
+                          return (
+                            <div
+                              ref={setSeatMapEl}
+                              className="overflow-auto rounded-xl mt-3"
+                              style={{ width: "100%" }}
                             >
-                          {/* Main Stage — rendered at its true position/size
+                              <div
+                                className="mx-auto"
+                                style={{
+                                  width: naturalW * trueScale,
+                                  height: naturalH * trueScale,
+                                }}
+                              >
+                                <div
+                                  className="relative"
+                                  style={{
+                                    width: naturalW,
+                                    height: naturalH,
+                                    transform: `scale(${trueScale})`,
+                                    transformOrigin: "top left",
+                                  }}
+                                >
+                                  {/* Main Stage — rendered at its true position/size
                               only when the organizer actually turned it on,
                               exactly matching the Space Layout canvas
                               (dragged position included, not just centered). */}
-                          {stageGeom &&
-                            (() => {
-                              return (
-                                <div
-                                  className="absolute flex items-center justify-center font-bold uppercase text-purple-800 bg-purple-200/90 border-2 border-purple-400"
-                                  style={{
-                                    left: offsetX + stageGeom.x,
-                                    top: offsetY + stageGeom.y,
-                                    width: stageGeom.w,
-                                    height: stageGeom.h,
-                                    borderRadius:
-                                      cropCfg?.mainStageShape === "semicircle"
-                                        ? "0 0 50% 50% / 0 0 100% 100%"
-                                        : cropCfg?.mainStageShape === "circle"
-                                          ? "50%"
-                                          : 8,
-                                    fontSize: 14,
-                                    zIndex: 8,
-                                  }}
-                                >
-                                  {cropCfg?.mainStageLabel || "Main Stage"}
-                                </div>
-                              );
-                            })()}
-                          {/* Entrance / Exit / custom doors — shown for
+                                  {stageGeom &&
+                                    (() => {
+                                      return (
+                                        <div
+                                          className="absolute flex items-center justify-center font-bold uppercase text-purple-800 bg-purple-200/90 border-2 border-purple-400"
+                                          style={{
+                                            left: offsetX + stageGeom.x,
+                                            top: offsetY + stageGeom.y,
+                                            width: stageGeom.w,
+                                            height: stageGeom.h,
+                                            borderRadius:
+                                              cropCfg?.mainStageShape ===
+                                              "semicircle"
+                                                ? "0 0 50% 50% / 0 0 100% 100%"
+                                                : cropCfg?.mainStageShape ===
+                                                    "circle"
+                                                  ? "50%"
+                                                  : 8,
+                                            fontSize: 14,
+                                            zIndex: 8,
+                                          }}
+                                        >
+                                          {cropCfg?.mainStageLabel ||
+                                            "Main Stage"}
+                                        </div>
+                                      );
+                                    })()}
+                                  {/* Entrance / Exit / custom doors — shown for
                               context (e.g. "which entrance is closest to my
                               seat"), same square/circle badge design and
                               true position as the general Venue Layout map. */}
-                          {boundsDoors
-                            .map((door: any) => {
-                              const type = (door?.type || "").toLowerCase();
-                              const isEntrance = type === "entrance";
-                              const isExit = type === "exit";
-                              const isSquare = door?.shape === "square";
-                              const dw =
-                                Number(door?.width) > 0
-                                  ? Number(door.width)
-                                  : 50;
-                              const dh =
-                                Number(door?.height) > 0
-                                  ? Number(door.height)
-                                  : 50;
-                              const doorColor = isEntrance
-                                ? "#16a34a"
-                                : isExit
-                                  ? "#dc2626"
-                                  : door?.color || "#f97316";
-                              const fallback = isEntrance
-                                ? "IN"
-                                : isExit
-                                  ? "OUT"
-                                  : "DOOR";
-                              return (
-                                <div
-                                  key={`seatmap-door-${door.id || `${door.x}-${door.y}`}`}
-                                  className="absolute flex items-center justify-center text-[12px] font-bold text-white shadow-md select-none pointer-events-none border-2 overflow-hidden"
-                                  style={{
-                                    left: offsetX + (door.x || 0),
-                                    top: offsetY + (door.y || 0),
-                                    width: dw,
-                                    height: dh,
-                                    borderRadius: isSquare
-                                      ? Math.max(2, dw * 0.16)
-                                      : "50%",
-                                    backgroundColor: doorColor,
-                                    borderColor: "rgba(0,0,0,0.25)",
-                                    transform: `rotate(${door.rotation || 0}deg)`,
-                                    transformOrigin: "center center",
-                                    zIndex: 7,
-                                  }}
-                                  title={(door.label as string) || fallback}
-                                >
-                                  <span className="px-0.5 truncate">
-                                    {door.label || fallback}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          {/* Non-sellable Spaces (decoration / standing
+                                  {boundsDoors.map((door: any) => {
+                                    const type = (
+                                      door?.type || ""
+                                    ).toLowerCase();
+                                    const isEntrance = type === "entrance";
+                                    const isExit = type === "exit";
+                                    const isSquare = door?.shape === "square";
+                                    const dw =
+                                      Number(door?.width) > 0
+                                        ? Number(door.width)
+                                        : 50;
+                                    const dh =
+                                      Number(door?.height) > 0
+                                        ? Number(door.height)
+                                        : 50;
+                                    const doorColor = isEntrance
+                                      ? "#16a34a"
+                                      : isExit
+                                        ? "#dc2626"
+                                        : door?.color || "#f97316";
+                                    const fallback = isEntrance
+                                      ? "IN"
+                                      : isExit
+                                        ? "OUT"
+                                        : "DOOR";
+                                    return (
+                                      <div
+                                        key={`seatmap-door-${door.id || `${door.x}-${door.y}`}`}
+                                        className="absolute flex items-center justify-center text-[12px] font-bold text-white shadow-md select-none pointer-events-none border-2 overflow-hidden"
+                                        style={{
+                                          left: offsetX + (door.x || 0),
+                                          top: offsetY + (door.y || 0),
+                                          width: dw,
+                                          height: dh,
+                                          borderRadius: isSquare
+                                            ? Math.max(2, dw * 0.16)
+                                            : "50%",
+                                          backgroundColor: doorColor,
+                                          borderColor: "rgba(0,0,0,0.25)",
+                                          transform: `rotate(${door.rotation || 0}deg)`,
+                                          transformOrigin: "center center",
+                                          zIndex: 7,
+                                        }}
+                                        title={
+                                          (door.label as string) || fallback
+                                        }
+                                      >
+                                        <span className="px-0.5 truncate">
+                                          {door.label || fallback}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                  {/* Non-sellable Spaces (decoration / standing
                               tables marked forSale: false) — layout-only
                               landmarks shown for context, same as the Venue
                               Layout tab: hatched fill, no click handler, no
@@ -8304,119 +8317,131 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               sell here. Sellable stalls are deliberately
                               left out of this section — booking those still
                               happens from the Venue Layout tab. */}
-                          {boundsSpaces
-                            .map((table: any) => (
-                              <div
-                                key={`seatmap-space-${table.positionId}`}
-                                className={`absolute border flex items-center justify-center pointer-events-none ${
-                                  table.type === "Round"
-                                    ? "rounded-full"
-                                    : table.type === "Corner"
-                                      ? "rounded-lg"
-                                      : "rounded-sm"
-                                }`}
-                                style={{
-                                  left: offsetX + (table.x || 0),
-                                  top: offsetY + (table.y || 0),
-                                  width:
-                                    table.displayWidth ?? table.width ?? 50,
-                                  height:
-                                    table.displayHeight ?? table.height ?? 50,
-                                  transform: `rotate(${table.rotation || 0}deg)`,
-                                  transformOrigin: "center center",
-                                  backgroundColor:
-                                    (table.color || "#f59e0b") + "59",
-                                  borderColor: table.color || "#f59e0b",
-                                  backgroundImage:
-                                    "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
-                                  zIndex: 6,
-                                }}
-                                title={table.name}
-                              >
-                                <span className="font-extrabold text-[11px] leading-none truncate w-full text-center text-gray-900 px-0.5">
-                                  {table.name}
-                                </span>
+                                  {boundsSpaces.map((table: any) => (
+                                    <div
+                                      key={`seatmap-space-${table.positionId}`}
+                                      className={`absolute border flex items-center justify-center pointer-events-none ${
+                                        table.type === "Round"
+                                          ? "rounded-full"
+                                          : table.type === "Corner"
+                                            ? "rounded-lg"
+                                            : "rounded-sm"
+                                      }`}
+                                      style={{
+                                        left: offsetX + (table.x || 0),
+                                        top: offsetY + (table.y || 0),
+                                        width:
+                                          table.displayWidth ??
+                                          table.width ??
+                                          50,
+                                        height:
+                                          table.displayHeight ??
+                                          table.height ??
+                                          50,
+                                        transform: `rotate(${table.rotation || 0}deg)`,
+                                        transformOrigin: "center center",
+                                        backgroundColor:
+                                          (table.color || "#f59e0b") + "59",
+                                        borderColor: table.color || "#f59e0b",
+                                        backgroundImage:
+                                          "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 6px)",
+                                        zIndex: 6,
+                                      }}
+                                      title={table.name}
+                                    >
+                                      <span className="font-extrabold text-[11px] leading-none truncate w-full text-center text-gray-900 px-0.5">
+                                        {table.name}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {seats.map((seat: any) => {
+                                    const row = (seatRowTemplates || []).find(
+                                      (r: any) => r.id === seat.rowId,
+                                    );
+                                    const isBooked =
+                                      seatMapBookedSeats.includes(seat.id);
+                                    const isSelected = selectedSeats.includes(
+                                      seat.id,
+                                    );
+                                    const color = seat.color || "#8B5CF6";
+                                    return (
+                                      <button
+                                        key={seat.id}
+                                        type="button"
+                                        disabled={isBooked}
+                                        title={
+                                          seat.name ||
+                                          `${row?.name || "Seat"}${seat.seatNumber}`
+                                        }
+                                        onClick={() =>
+                                          setSelectedSeats((prev) =>
+                                            prev.includes(seat.id)
+                                              ? prev.filter(
+                                                  (s) => s !== seat.id,
+                                                )
+                                              : [...prev, seat.id],
+                                          )
+                                        }
+                                        className="absolute transition-all duration-150 hover:scale-110 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center leading-none overflow-hidden px-0.5"
+                                        style={{
+                                          left: offsetX + seat.x,
+                                          top: offsetY + seat.y,
+                                          width: seatSize,
+                                          height: seatSize,
+                                          // Proportional to the seat's own size, not
+                                          // a fixed px value — a fixed radius (e.g.
+                                          // Tailwind's rounded-md, 6px) swallows a
+                                          // small seat whole and reads as a circle.
+                                          borderRadius: Math.max(
+                                            1,
+                                            seatSize * 0.16,
+                                          ),
+                                          // Bumped up from the original 0.26/6 floor
+                                          // — legible at a glance was the goal, and
+                                          // the button already truncates long custom
+                                          // names rather than overflowing.
+                                          fontSize: Math.max(
+                                            11,
+                                            seatSize * 0.45,
+                                          ),
+                                          fontWeight: 700,
+                                          color: isBooked
+                                            ? "#94a3b8"
+                                            : "#ffffff",
+                                          backgroundColor: isBooked
+                                            ? "#e2e8f0"
+                                            : color,
+                                          backgroundImage: isBooked
+                                            ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 6px)"
+                                            : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%)",
+                                          opacity: isBooked ? 0.7 : 1,
+                                          // A subtle chair-like bevel on every seat
+                                          // (soft top highlight, darker underside) so
+                                          // they read as seats rather than flat
+                                          // color swatches; selected ones add a
+                                          // bright ring + a glow in the seat's own
+                                          // color for a premium "picked" feel.
+                                          boxShadow: isBooked
+                                            ? "inset 0 -2px 2px rgba(0,0,0,0.12)"
+                                            : isSelected
+                                              ? `0 0 0 2px #ffffff, 0 0 0 4px ${design?.primaryColor || "#111827"}, 0 6px 14px -2px ${color}88, inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4)`
+                                              : "inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4)",
+                                          transform: seat.rotation
+                                            ? `rotate(${seat.rotation}deg)`
+                                            : undefined,
+                                        }}
+                                      >
+                                        <span className="truncate drop-shadow-sm">
+                                          {seat.name || seat.seatNumber}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            ))}
-                          {seats.map((seat: any) => {
-                            const row = (seatRowTemplates || []).find(
-                              (r: any) => r.id === seat.rowId,
-                            );
-                            const isBooked = seatMapBookedSeats.includes(
-                              seat.id,
-                            );
-                            const isSelected = selectedSeats.includes(
-                              seat.id,
-                            );
-                            const color = seat.color || "#8B5CF6";
-                            return (
-                              <button
-                                key={seat.id}
-                                type="button"
-                                disabled={isBooked}
-                                title={
-                                  seat.name ||
-                                  `${row?.name || "Seat"}${seat.seatNumber}`
-                                }
-                                onClick={() =>
-                                  setSelectedSeats((prev) =>
-                                    prev.includes(seat.id)
-                                      ? prev.filter((s) => s !== seat.id)
-                                      : [...prev, seat.id],
-                                  )
-                                }
-                                className="absolute transition-all duration-150 hover:scale-110 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center leading-none overflow-hidden px-0.5"
-                                style={{
-                                  left: offsetX + seat.x,
-                                  top: offsetY + seat.y,
-                                  width: seatSize,
-                                  height: seatSize,
-                                  // Proportional to the seat's own size, not
-                                  // a fixed px value — a fixed radius (e.g.
-                                  // Tailwind's rounded-md, 6px) swallows a
-                                  // small seat whole and reads as a circle.
-                                  borderRadius: Math.max(1, seatSize * 0.16),
-                                  // Bumped up from the original 0.26/6 floor
-                                  // — legible at a glance was the goal, and
-                                  // the button already truncates long custom
-                                  // names rather than overflowing.
-                                  fontSize: Math.max(11, seatSize * 0.45),
-                                  fontWeight: 700,
-                                  color: isBooked ? "#94a3b8" : "#ffffff",
-                                  backgroundColor: isBooked
-                                    ? "#e2e8f0"
-                                    : color,
-                                  backgroundImage: isBooked
-                                    ? "repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 6px)"
-                                    : "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 45%)",
-                                  opacity: isBooked ? 0.7 : 1,
-                                  // A subtle chair-like bevel on every seat
-                                  // (soft top highlight, darker underside) so
-                                  // they read as seats rather than flat
-                                  // color swatches; selected ones add a
-                                  // bright ring + a glow in the seat's own
-                                  // color for a premium "picked" feel.
-                                  boxShadow: isBooked
-                                    ? "inset 0 -2px 2px rgba(0,0,0,0.12)"
-                                    : isSelected
-                                      ? `0 0 0 2px #ffffff, 0 0 0 4px ${design?.primaryColor || "#111827"}, 0 6px 14px -2px ${color}88, inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4)`
-                                      : "inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4)",
-                                  transform: seat.rotation
-                                    ? `rotate(${seat.rotation}deg)`
-                                    : undefined,
-                                }}
-                              >
-                                <span className="truncate drop-shadow-sm">
-                                  {seat.name || seat.seatNumber}
-                                </span>
-                              </button>
-                            );
-                          })}
                             </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                          );
+                        })()}
                       </>
                     )}
                   </div>
@@ -8430,59 +8455,59 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       Skipped entirely when this screen has no seats — see
                       the empty state above. */}
                   {seats.length > 0 && (
-                  <div className="mt-5 pt-5 border-t border-gray-100">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2.5">
-                      Seat Types
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {Array.from(
-                        new Map(
-                          seats.map((s: any) => [s.rowId, true]),
-                        ).keys(),
-                      )
-                        .map((rowId) =>
-                          (seatRowTemplates || []).find(
-                            (r: any) => r.id === rowId,
-                          ),
+                    <div className="mt-5 pt-5 border-t border-gray-100">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2.5">
+                        Seat Types
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from(
+                          new Map(
+                            seats.map((s: any) => [s.rowId, true]),
+                          ).keys(),
                         )
-                        .filter(Boolean)
-                        .map((row: any) => (
-                          <div
-                            key={row.id}
-                            className="flex items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm"
-                            style={{ borderColor: row.color + "55" }}
-                          >
-                            <span
-                              className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: row.color }}
-                            />
-                            {row.name}
-                            <span className="text-gray-300">·</span>
-                            <span
-                              className="font-semibold"
-                              style={{ color: row.color }}
+                          .map((rowId) =>
+                            (seatRowTemplates || []).find(
+                              (r: any) => r.id === rowId,
+                            ),
+                          )
+                          .filter(Boolean)
+                          .map((row: any) => (
+                            <div
+                              key={row.id}
+                              className="flex items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm"
+                              style={{ borderColor: row.color + "55" }}
                             >
-                              {row.price === 0
-                                ? "Free"
-                                : formatPrice(row.price)}
-                            </span>
-                          </div>
-                        ))}
-                      <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm">
-                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-gray-900 ring-2 ring-white ring-offset-1 ring-offset-gray-300" />
-                        Selected
-                      </div>
-                      <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-400 shadow-sm">
-                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-gray-300" />
-                        Booked
-                      </div>
-                      {/* Doors are NOT sellable — they don't get a legend
+                              <span
+                                className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: row.color }}
+                              />
+                              {row.name}
+                              <span className="text-gray-300">·</span>
+                              <span
+                                className="font-semibold"
+                                style={{ color: row.color }}
+                              >
+                                {row.price === 0
+                                  ? "Free"
+                                  : formatPrice(row.price)}
+                              </span>
+                            </div>
+                          ))}
+                        <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm">
+                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-gray-900 ring-2 ring-white ring-offset-1 ring-offset-gray-300" />
+                          Selected
+                        </div>
+                        <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-400 shadow-sm">
+                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 bg-gray-300" />
+                          Booked
+                        </div>
+                        {/* Doors are NOT sellable — they don't get a legend
                           entry (their IN/OUT/label text is already shown
                           directly on the badge on the map). Only the seating
                           rows above (which have a price) belong in this
                           legend. */}
+                      </div>
                     </div>
-                  </div>
                   )}
                 </div>
               </section>
@@ -8576,8 +8601,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                               </span>
                               <p className="text-xs text-gray-400">
                                 {selectedSeats.length} seat
-                                {selectedSeats.length === 1 ? "" : "s"}{" "}
-                                selected
+                                {selectedSeats.length === 1 ? "" : "s"} selected
                               </p>
                             </div>
                             <span className="text-2xl font-black text-gray-900">
@@ -9155,97 +9179,97 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     style={{ WebkitOverflowScrolling: "touch" }}
                   >
                     {eventData.speakers.map((speaker: any, idx: number) => (
-                    <div
-                      key={speaker.id || idx}
-                      className="flex-shrink-0 w-64 snap-center rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow"
-                    >
-                      {/* Speaker Photo */}
-                      <div className="h-44 bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center overflow-hidden">
-                        {speaker.image ? (
-                          <img
-                            src={
-                              speaker.image.startsWith("/")
-                                ? `${apiURL?.replace("/api", "")}${speaker.image}`
-                                : speaker.image
-                            }
-                            alt={speaker.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-24 h-24 rounded-full bg-white/80 flex items-center justify-center text-4xl font-bold text-purple-400 shadow-inner">
-                            {speaker.name?.charAt(0)?.toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-bold text-gray-900 text-sm truncate">
-                            {speaker.name}
-                          </h3>
-                          {/* {speaker.isKeynote && (
+                      <div
+                        key={speaker.id || idx}
+                        className="flex-shrink-0 w-64 snap-center rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                      >
+                        {/* Speaker Photo */}
+                        <div className="h-44 bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center overflow-hidden">
+                          {speaker.image ? (
+                            <img
+                              src={
+                                speaker.image.startsWith("/")
+                                  ? `${apiURL?.replace("/api", "")}${speaker.image}`
+                                  : speaker.image
+                              }
+                              alt={speaker.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-24 h-24 rounded-full bg-white/80 flex items-center justify-center text-4xl font-bold text-purple-400 shadow-inner">
+                              {speaker.name?.charAt(0)?.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-bold text-gray-900 text-sm truncate">
+                              {speaker.name}
+                            </h3>
+                            {/* {speaker.isKeynote && (
                             <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
                               KEYNOTE
                             </span>
                           )} */}
-                        </div>
-                        {(speaker.title || speaker.organization) && (
-                          <p className="text-xs text-gray-500 truncate">
-                            {speaker.title}
-                            {speaker.organization
-                              ? ` · ${speaker.organization}`
-                              : ""}
-                          </p>
-                        )}
-                        {speaker.slots?.[0] && (
-                          <div className="mt-2 bg-purple-50 rounded-lg px-3 py-2">
-                            <p className="text-xs font-medium text-purple-800 truncate">
-                              {speaker.slots[0].topic}
+                          </div>
+                          {(speaker.title || speaker.organization) && (
+                            <p className="text-xs text-gray-500 truncate">
+                              {speaker.title}
+                              {speaker.organization
+                                ? ` · ${speaker.organization}`
+                                : ""}
                             </p>
-                            {speaker.slots[0].startTime && (
-                              <p className="text-[10px] text-purple-600 mt-0.5">
-                                {speaker.slots[0].startTime} -{" "}
-                                {speaker.slots[0].endTime}
+                          )}
+                          {speaker.slots?.[0] && (
+                            <div className="mt-2 bg-purple-50 rounded-lg px-3 py-2">
+                              <p className="text-xs font-medium text-purple-800 truncate">
+                                {speaker.slots[0].topic}
                               </p>
-                            )}
-                          </div>
-                        )}
-                        {speaker.socialLinks && (
-                          <div className="flex gap-2 mt-2">
-                            {speaker.socialLinks.linkedin && (
-                              <a
-                                href={speaker.socialLinks.linkedin}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-blue-600 hover:underline"
-                              >
-                                LinkedIn
-                              </a>
-                            )}
-                            {speaker.socialLinks.twitter && (
-                              <a
-                                href={speaker.socialLinks.twitter}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-gray-500 hover:underline"
-                              >
-                                Twitter
-                              </a>
-                            )}
-                            {speaker.socialLinks.instagram && (
-                              <a
-                                href={speaker.socialLinks.instagram}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-pink-500 hover:underline"
-                              >
-                                Instagram
-                              </a>
-                            )}
-                          </div>
-                        )}
+                              {speaker.slots[0].startTime && (
+                                <p className="text-[10px] text-purple-600 mt-0.5">
+                                  {speaker.slots[0].startTime} -{" "}
+                                  {speaker.slots[0].endTime}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {speaker.socialLinks && (
+                            <div className="flex gap-2 mt-2">
+                              {speaker.socialLinks.linkedin && (
+                                <a
+                                  href={speaker.socialLinks.linkedin}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-blue-600 hover:underline"
+                                >
+                                  LinkedIn
+                                </a>
+                              )}
+                              {speaker.socialLinks.twitter && (
+                                <a
+                                  href={speaker.socialLinks.twitter}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-gray-500 hover:underline"
+                                >
+                                  Twitter
+                                </a>
+                              )}
+                              {speaker.socialLinks.instagram && (
+                                <a
+                                  href={speaker.socialLinks.instagram}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-pink-500 hover:underline"
+                                >
+                                  Instagram
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                   </div>
                   {eventData.speakers.length > 1 && (
                     <>
@@ -9293,116 +9317,119 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
 
                   <div className="relative">
-                  <div
-                    ref={workshopsScrollRef}
-                    className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
-                    style={{ WebkitOverflowScrolling: "touch" }}
-                  >
-                    {eventData.workshopSessions.map((session: any) => {
-                      const seatsLeft =
-                        session.maxSeats > 0
-                          ? Math.max(
-                              session.maxSeats - (session.bookedSeats || 0),
-                              0,
-                            )
-                          : null;
-                      const soldOut = seatsLeft === 0;
-                      return (
-                        <div
-                          key={session.id}
-                          className="flex-shrink-0 w-64 snap-center rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow"
-                        >
-                          <div className="h-36 bg-gradient-to-br from-cyan-100 to-blue-100 flex items-center justify-center overflow-hidden">
-                            {session.image ? (
-                              <img
-                                src={
-                                  session.image.startsWith("/")
-                                    ? `${apiURL?.replace("/api", "")}${session.image}`
-                                    : session.image
-                                }
-                                alt={session.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <GraduationCap className="h-10 w-10 text-blue-300" />
-                            )}
-                          </div>
-                          <div className="p-4 space-y-2">
-                            <h3 className="font-bold text-gray-900 text-sm truncate">
-                              {session.name}
-                            </h3>
-                            {session.description && (
-                              <p className="text-xs text-gray-500 line-clamp-2">
-                                {session.description}
-                              </p>
-                            )}
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-sm text-gray-800">
-                                {session.price === 0
-                                  ? "Free"
-                                  : formatPrice(session.price)}
-                              </span>
-                              {seatsLeft !== null && (
-                                <span
-                                  className={`text-[10px] font-medium ${soldOut ? "text-red-500" : "text-gray-400"}`}
-                                >
-                                  {soldOut
-                                    ? "Sold out"
-                                    : `${seatsLeft} seat(s) left`}
-                                </span>
+                    <div
+                      ref={workshopsScrollRef}
+                      className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
+                      style={{ WebkitOverflowScrolling: "touch" }}
+                    >
+                      {eventData.workshopSessions.map((session: any) => {
+                        const seatsLeft =
+                          session.maxSeats > 0
+                            ? Math.max(
+                                session.maxSeats - (session.bookedSeats || 0),
+                                0,
+                              )
+                            : null;
+                        const soldOut = seatsLeft === 0;
+                        return (
+                          <div
+                            key={session.id}
+                            className="flex-shrink-0 w-64 snap-center rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                          >
+                            <div className="h-36 bg-gradient-to-br from-cyan-100 to-blue-100 flex items-center justify-center overflow-hidden">
+                              {session.image ? (
+                                <img
+                                  src={
+                                    session.image.startsWith("/")
+                                      ? `${apiURL?.replace("/api", "")}${session.image}`
+                                      : session.image
+                                  }
+                                  alt={session.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <GraduationCap className="h-10 w-10 text-blue-300" />
                               )}
                             </div>
-                            <button
-                              type="button"
-                              disabled={soldOut || isEventOver(eventData)}
-                              onClick={() =>
-                                navigate("/workshop-checkout", {
-                                  state: {
-                                    eventId: dbEventId,
-                                    referralRequired: !!(eventData as any)?.features?.hasAgents,
-                                    organizerId: eventData?.organizer?._id,
-                                    eventTitle: eventData?.title,
-                                    bookingType: "session",
-                                    sessionId: session.id,
-                                    name: session.name,
-                                    description: session.description,
-                                    unitPrice: session.price || 0,
-                                    seatsRemaining: seatsLeft,
-                                  },
-                                })
-                              }
-                              className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40"
-                              style={{
-                                background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
-                              }}
-                            >
-                              {soldOut ? "Sold Out" : "Book Now"}
-                            </button>
+                            <div className="p-4 space-y-2">
+                              <h3 className="font-bold text-gray-900 text-sm truncate">
+                                {session.name}
+                              </h3>
+                              {session.description && (
+                                <p className="text-xs text-gray-500 line-clamp-2">
+                                  {session.description}
+                                </p>
+                              )}
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-sm text-gray-800">
+                                  {session.price === 0
+                                    ? "Free"
+                                    : formatPrice(session.price)}
+                                </span>
+                                {seatsLeft !== null && (
+                                  <span
+                                    className={`text-[10px] font-medium ${soldOut ? "text-red-500" : "text-gray-400"}`}
+                                  >
+                                    {soldOut
+                                      ? "Sold out"
+                                      : `${seatsLeft} seat(s) left`}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={soldOut || isEventOver(eventData)}
+                                onClick={() =>
+                                  navigate("/workshop-checkout", {
+                                    state: {
+                                      eventId: dbEventId,
+                                      referralRequired: !!(eventData as any)
+                                        ?.features?.hasAgents,
+                                      organizerId: eventData?.organizer?._id,
+                                      eventTitle: eventData?.title,
+                                      bookingType: "session",
+                                      sessionId: session.id,
+                                      name: session.name,
+                                      description: session.description,
+                                      unitPrice: session.price || 0,
+                                      seatsRemaining: seatsLeft,
+                                    },
+                                  })
+                                }
+                                className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40"
+                                style={{
+                                  background: `linear-gradient(135deg, ${design?.primaryColor || "#3b82f6"}, ${design?.secondaryColor || "#6366f1"})`,
+                                }}
+                              >
+                                {soldOut ? "Sold Out" : "Book Now"}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {eventData.workshopSessions.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => scrollRowByCard(workshopsScrollRef, -1)}
-                        aria-label="Scroll workshops left"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
-                      >
-                        <ChevronLeft className="h-4 w-4 text-gray-700" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => scrollRowByCard(workshopsScrollRef, 1)}
-                        aria-label="Scroll workshops right"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
-                      >
-                        <ChevronRight className="h-4 w-4 text-gray-700" />
-                      </button>
-                    </>
-                  )}
+                        );
+                      })}
+                    </div>
+                    {eventData.workshopSessions.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            scrollRowByCard(workshopsScrollRef, -1)
+                          }
+                          aria-label="Scroll workshops left"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
+                        >
+                          <ChevronLeft className="h-4 w-4 text-gray-700" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollRowByCard(workshopsScrollRef, 1)}
+                          aria-label="Scroll workshops right"
+                          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/3 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white flex items-center justify-center transition-all shadow-md border border-gray-200"
+                        >
+                          <ChevronRight className="h-4 w-4 text-gray-700" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </section>
               )}
@@ -9419,9 +9446,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 </DialogHeader>
                 <div className="space-y-3">
                   {(eventData?.workshopPackages || []).map((pkg: any) => {
-                    const included = (
-                      eventData.workshopSessions || []
-                    ).filter((s: any) => (pkg.sessionIds || []).includes(s.id));
+                    const included = (eventData.workshopSessions || []).filter(
+                      (s: any) => (pkg.sessionIds || []).includes(s.id),
+                    );
                     const individualTotal = included.reduce(
                       (sum: number, s: any) => sum + (s.price || 0),
                       0,
@@ -9471,7 +9498,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             navigate("/workshop-checkout", {
                               state: {
                                 eventId: dbEventId,
-                                referralRequired: !!(eventData as any)?.features?.hasAgents,
+                                referralRequired: !!(eventData as any)?.features
+                                  ?.hasAgents,
                                 organizerId: eventData?.organizer?._id,
                                 eventTitle: eventData?.title,
                                 bookingType: "package",
@@ -9565,433 +9593,442 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 order-1 lg:order-2">
             <div className="sticky-sidebar space-y-4">
               <div className="hidden lg:block">
-              {/* ── Ticket Purchase Card — only if tickets or seats exist ── */}
-              {(visitorTypes && visitorTypes.length > 0) || showSeatPicker ? (
-                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                  <div className="p-5 sm:p-6">
-                    {/* Cinema/concert seating: the actual seat map now lives
+                {/* ── Ticket Purchase Card — only if tickets or seats exist ── */}
+                {(visitorTypes && visitorTypes.length > 0) || showSeatPicker ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="p-5 sm:p-6">
+                      {/* Cinema/concert seating: the actual seat map now lives
                         in its own full-width section above (near the top of
                         the main content column) where there's real room for
                         it. This card just shows a compact running summary —
                         which seats are picked and the total — plus the Buy
                         CTA below. */}
-                    {showSeatPicker ? (
-                      <>
-                        <p className="text-gray-900 font-bold text-lg mb-1">
-                          Your Seats
-                        </p>
-                        {selectedSeats.length === 0 ? (
-                          // On mobile this card sits ABOVE the actual seat
-                          // map in page order (the sidebar comes first in
-                          // the stacked layout), so "the map above" would be
-                          // backwards — a real jump link instead of static
-                          // text works regardless of layout.
-                          <button
-                            type="button"
-                            onClick={() =>
-                              document
-                                .getElementById("seat-picker-map")
-                                ?.scrollIntoView({
-                                  behavior: "smooth",
-                                  block: "start",
-                                })
-                            }
-                            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
-                          >
-                            Pick your seats from the seat map
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5 mb-4">
-                            {selectedSeats.map((seatId) => {
-                              const seat = seats.find(
-                                (s: any) => s.id === seatId,
-                              );
-                              const row = (seatRowTemplates || []).find(
-                                (r: any) => r.id === seat?.rowId,
-                              );
-                              const label =
-                                seat?.name ||
-                                `${row?.name || ""}${seat?.seatNumber ?? ""}`;
-                              return (
-                                <span
-                                  key={seatId}
-                                  className="inline-flex items-center gap-1 rounded-md bg-gray-900 text-white text-xs font-semibold px-2 py-1"
-                                >
-                                  {label}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setSelectedSeats((prev) =>
-                                        prev.filter((s) => s !== seatId),
-                                      )
-                                    }
-                                    className="text-gray-400 hover:text-white"
-                                    title="Remove"
+                      {showSeatPicker ? (
+                        <>
+                          <p className="text-gray-900 font-bold text-lg mb-1">
+                            Your Seats
+                          </p>
+                          {selectedSeats.length === 0 ? (
+                            // On mobile this card sits ABOVE the actual seat
+                            // map in page order (the sidebar comes first in
+                            // the stacked layout), so "the map above" would be
+                            // backwards — a real jump link instead of static
+                            // text works regardless of layout.
+                            <button
+                              type="button"
+                              onClick={() =>
+                                document
+                                  .getElementById("seat-picker-map")
+                                  ?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "start",
+                                  })
+                              }
+                              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+                            >
+                              Pick your seats from the seat map
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5 mb-4">
+                              {selectedSeats.map((seatId) => {
+                                const seat = seats.find(
+                                  (s: any) => s.id === seatId,
+                                );
+                                const row = (seatRowTemplates || []).find(
+                                  (r: any) => r.id === seat?.rowId,
+                                );
+                                const label =
+                                  seat?.name ||
+                                  `${row?.name || ""}${seat?.seatNumber ?? ""}`;
+                                return (
+                                  <span
+                                    key={seatId}
+                                    className="inline-flex items-center gap-1 rounded-md bg-gray-900 text-white text-xs font-semibold px-2 py-1"
                                   >
-                                    ×
-                                  </button>
+                                    {label}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setSelectedSeats((prev) =>
+                                          prev.filter((s) => s !== seatId),
+                                        )
+                                      }
+                                      className="text-gray-400 hover:text-white"
+                                      title="Remove"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div className="border-t border-gray-100 pt-4 mb-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-gray-600 text-sm font-medium">
+                                  Total
                                 </span>
+                                <p className="text-xs text-gray-400">
+                                  {selectedSeats.length} seat
+                                  {selectedSeats.length === 1 ? "" : "s"}{" "}
+                                  selected
+                                </p>
+                              </div>
+                              <span className="text-2xl font-black text-gray-900">
+                                {formatPrice(
+                                  selectedSeats.reduce((sum, seatId) => {
+                                    const seat = seats.find(
+                                      (s: any) => s.id === seatId,
+                                    );
+                                    const row = (seatRowTemplates || []).find(
+                                      (r: any) => r.id === seat?.rowId,
+                                    );
+                                    return sum + (Number(row?.price) || 0);
+                                  }, 0),
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      ) : visitorTypes && visitorTypes.length > 0 ? (
+                        <>
+                          <p className="text-gray-900 font-bold text-lg mb-3">
+                            Select Ticket Type
+                          </p>
+                          <div className="space-y-2 mb-4">
+                            {visitorTypes.map((vt: any, idx: number) => {
+                              const isSelected = selectedVisitorType === idx;
+                              return (
+                                <button
+                                  key={vt.id || idx}
+                                  type="button"
+                                  onClick={() => setSelectedVisitorType(idx)}
+                                  className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${isSelected ? "border-2 bg-gray-50/80 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                                  style={
+                                    isSelected
+                                      ? {
+                                          borderColor:
+                                            design?.primaryColor || "#6366f1",
+                                        }
+                                      : {}
+                                  }
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {/* Radio indicator */}
+                                    <div
+                                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? "border-transparent" : "border-gray-300"}`}
+                                      style={
+                                        isSelected
+                                          ? {
+                                              backgroundColor:
+                                                design?.primaryColor ||
+                                                "#6366f1",
+                                            }
+                                          : {}
+                                      }
+                                    >
+                                      {isSelected && (
+                                        <div className="w-2 h-2 rounded-full bg-white" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between mb-0.5">
+                                        <h4 className="font-semibold text-gray-900 text-sm">
+                                          {vt.name}
+                                        </h4>
+                                        <span
+                                          className="font-bold text-base flex-shrink-0 ml-2"
+                                          style={{
+                                            color:
+                                              design?.secondaryColor ||
+                                              "#ef4444",
+                                          }}
+                                        >
+                                          {vt.price === 0
+                                            ? "Free"
+                                            : formatPrice(vt.price)}
+                                        </span>
+                                      </div>
+                                      {vt.description && (
+                                        <p className="text-xs text-gray-500 mb-1">
+                                          {vt.description}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs text-gray-400">
+                                          {vt.maxCount > 0
+                                            ? `${vt.maxCount} spots`
+                                            : "Unlimited"}
+                                        </span>
+                                        {vt.featureAccess && (
+                                          <div className="flex gap-1 flex-wrap justify-end">
+                                            {Object.entries(vt.featureAccess)
+                                              .filter(([, v]) => v)
+                                              .map(([k]) => (
+                                                <span
+                                                  key={k}
+                                                  className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] capitalize text-gray-500"
+                                                >
+                                                  {k}
+                                                </span>
+                                              ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </button>
                               );
                             })}
                           </div>
-                        )}
 
-                        <div className="border-t border-gray-100 pt-4 mb-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="text-gray-600 text-sm font-medium">
-                                Total
+                          {/* Total for selected type */}
+                          <div className="border-t border-gray-100 pt-4 mb-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-gray-600 text-sm font-medium">
+                                  Total
+                                </span>
+                                <p className="text-xs text-gray-400">
+                                  {visitorTypes[selectedVisitorType]?.name} x1
+                                </p>
+                              </div>
+                              <span className="text-2xl font-black text-gray-900">
+                                {visitorTypes[selectedVisitorType]?.price === 0
+                                  ? "Free"
+                                  : formatPrice(
+                                      visitorTypes[selectedVisitorType]
+                                        ?.price || 0,
+                                    )}
                               </span>
-                              <p className="text-xs text-gray-400">
-                                {selectedSeats.length} seat
-                                {selectedSeats.length === 1 ? "" : "s"}{" "}
-                                selected
-                              </p>
                             </div>
-                            <span className="text-2xl font-black text-gray-900">
-                              {formatPrice(
-                                selectedSeats.reduce((sum, seatId) => {
-                                  const seat = seats.find(
-                                    (s: any) => s.id === seatId,
-                                  );
-                                  const row = (seatRowTemplates || []).find(
-                                    (r: any) => r.id === seat?.rowId,
-                                  );
-                                  return sum + (Number(row?.price) || 0);
-                                }, 0),
-                              )}
-                            </span>
                           </div>
-                        </div>
-                      </>
-                    ) : visitorTypes && visitorTypes.length > 0 ? (
-                      <>
-                        <p className="text-gray-900 font-bold text-lg mb-3">
-                          Select Ticket Type
-                        </p>
-                        <div className="space-y-2 mb-4">
-                          {visitorTypes.map((vt: any, idx: number) => {
-                            const isSelected = selectedVisitorType === idx;
-                            return (
-                              <button
-                                key={vt.id || idx}
-                                type="button"
-                                onClick={() => setSelectedVisitorType(idx)}
-                                className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${isSelected ? "border-2 bg-gray-50/80 shadow-sm" : "border-gray-200 bg-white hover:bg-gray-50"}`}
-                                style={
-                                  isSelected
-                                    ? {
-                                        borderColor:
-                                          design?.primaryColor || "#6366f1",
-                                      }
-                                    : {}
-                                }
-                              >
-                                <div className="flex items-center gap-3">
-                                  {/* Radio indicator */}
-                                  <div
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? "border-transparent" : "border-gray-300"}`}
-                                    style={
-                                      isSelected
-                                        ? {
-                                            backgroundColor:
-                                              design?.primaryColor || "#6366f1",
-                                          }
-                                        : {}
-                                    }
+                        </>
+                      ) : (
+                        <>
+                          {/* Single ticket type (legacy) */}
+                          <p className="text-gray-500 text-sm mb-1">
+                            Price per ticket
+                          </p>
+                          <p
+                            className="text-4xl sm:text-5xl font-black mb-4 leading-none"
+                            style={{
+                              color: design?.secondaryColor || "#ef4444",
+                            }}
+                          >
+                            {ticketPrice === 0
+                              ? "Free"
+                              : formatPrice(ticketPrice)}
+                          </p>
+
+                          {/* Availability bar */}
+                          <div className="mb-5">
+                            {totalTickets > 0 ? (
+                              <>
+                                <div className="flex items-center justify-between text-sm mb-1.5">
+                                  <span className="text-gray-600 font-medium">
+                                    {availableTickets} tickets left
+                                  </span>
+                                  <span
+                                    className="font-semibold"
+                                    style={{
+                                      color:
+                                        design?.secondaryColor || "#ef4444",
+                                    }}
                                   >
-                                    {isSelected && (
-                                      <div className="w-2 h-2 rounded-full bg-white" />
+                                    {Math.round(
+                                      ((totalTickets - availableTickets) /
+                                        totalTickets) *
+                                        100,
                                     )}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between mb-0.5">
-                                      <h4 className="font-semibold text-gray-900 text-sm">
-                                        {vt.name}
-                                      </h4>
-                                      <span
-                                        className="font-bold text-base flex-shrink-0 ml-2"
-                                        style={{
-                                          color:
-                                            design?.secondaryColor || "#ef4444",
-                                        }}
-                                      >
-                                        {vt.price === 0
-                                          ? "Free"
-                                          : formatPrice(vt.price)}
-                                      </span>
-                                    </div>
-                                    {vt.description && (
-                                      <p className="text-xs text-gray-500 mb-1">
-                                        {vt.description}
-                                      </p>
-                                    )}
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs text-gray-400">
-                                        {vt.maxCount > 0
-                                          ? `${vt.maxCount} spots`
-                                          : "Unlimited"}
-                                      </span>
-                                      {vt.featureAccess && (
-                                        <div className="flex gap-1 flex-wrap justify-end">
-                                          {Object.entries(vt.featureAccess)
-                                            .filter(([, v]) => v)
-                                            .map(([k]) => (
-                                              <span
-                                                key={k}
-                                                className="px-1.5 py-0.5 bg-gray-100 rounded text-[9px] capitalize text-gray-500"
-                                              >
-                                                {k}
-                                              </span>
-                                            ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
+                                    % sold
+                                  </span>
                                 </div>
-                              </button>
-                            );
-                          })}
-                        </div>
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{
+                                      width: `${Math.min(((totalTickets - availableTickets) / totalTickets) * 100, 100)}%`,
+                                      background: `linear-gradient(to right, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                                    }}
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-sm text-gray-500 font-medium">
+                                Unlimited tickets available
+                              </p>
+                            )}
+                          </div>
 
-                        {/* Total for selected type */}
-                        <div className="border-t border-gray-100 pt-4 mb-4">
-                          <div className="flex items-center justify-between">
-                            <div>
+                          {/* Divider + Total */}
+                          <div className="border-t border-gray-100 pt-4 mb-4">
+                            <div className="flex items-center justify-between">
                               <span className="text-gray-600 text-sm font-medium">
                                 Total
                               </span>
-                              <p className="text-xs text-gray-400">
-                                {visitorTypes[selectedVisitorType]?.name} x1
-                              </p>
+                              <span className="text-2xl font-black text-gray-900">
+                                {ticketPrice === 0
+                                  ? "Free"
+                                  : formatPrice(ticketPrice * ticketQuantity)}
+                              </span>
                             </div>
-                            <span className="text-2xl font-black text-gray-900">
-                              {visitorTypes[selectedVisitorType]?.price === 0
-                                ? "Free"
-                                : formatPrice(
-                                    visitorTypes[selectedVisitorType]?.price ||
-                                      0,
-                                  )}
-                            </span>
                           </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* Single ticket type (legacy) */}
-                        <p className="text-gray-500 text-sm mb-1">
-                          Price per ticket
-                        </p>
-                        <p
-                          className="text-4xl sm:text-5xl font-black mb-4 leading-none"
-                          style={{ color: design?.secondaryColor || "#ef4444" }}
-                        >
-                          {ticketPrice === 0
-                            ? "Free"
-                            : formatPrice(ticketPrice)}
-                        </p>
+                        </>
+                      )}
 
-                        {/* Availability bar */}
-                        <div className="mb-5">
-                          {totalTickets > 0 ? (
-                            <>
-                              <div className="flex items-center justify-between text-sm mb-1.5">
-                                <span className="text-gray-600 font-medium">
-                                  {availableTickets} tickets left
-                                </span>
-                                <span
-                                  className="font-semibold"
-                                  style={{
-                                    color: design?.secondaryColor || "#ef4444",
-                                  }}
-                                >
-                                  {Math.round(
-                                    ((totalTickets - availableTickets) /
-                                      totalTickets) *
-                                      100,
-                                  )}
-                                  % sold
-                                </span>
-                              </div>
-                              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${Math.min(((totalTickets - availableTickets) / totalTickets) * 100, 100)}%`,
-                                    background: `linear-gradient(to right, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
-                                  }}
-                                />
-                              </div>
-                            </>
-                          ) : (
-                            <p className="text-sm text-gray-500 font-medium">
-                              Unlimited tickets available
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Divider + Total */}
-                        <div className="border-t border-gray-100 pt-4 mb-4">
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-600 text-sm font-medium">
-                              Total
-                            </span>
-                            <span className="text-2xl font-black text-gray-900">
-                              {ticketPrice === 0
-                                ? "Free"
-                                : formatPrice(ticketPrice * ticketQuantity)}
-                            </span>
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Buy Tickets CTA — only if visitorTypes exist. Once the
+                      {/* Buy Tickets CTA — only if visitorTypes exist. Once the
                         event is over, sales close: the button is replaced with
                         an "ended" notice (the handler + backend also refuse). */}
-                    {showSeatPicker ? (
-                      isEventOver(eventData) ? (
-                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
-                          This event has ended — ticket sales are closed.
-                        </div>
+                      {showSeatPicker ? (
+                        isEventOver(eventData) ? (
+                          <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                            This event has ended — ticket sales are closed.
+                          </div>
+                        ) : (
+                          <button
+                            onClick={handleGetSeatTickets}
+                            disabled={selectedSeats.length === 0}
+                            className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+                            style={{
+                              background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                            }}
+                          >
+                            <Ticket className="h-5 w-5" />
+                            {selectedSeats.length === 0
+                              ? "Select Seats"
+                              : `Buy ${selectedSeats.length} Seat${selectedSeats.length === 1 ? "" : "s"}`}
+                          </button>
+                        )
                       ) : (
+                        visitorTypes &&
+                        visitorTypes.length > 0 &&
+                        (isEventOver(eventData) ? (
+                          <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
+                            This event has ended — ticket sales are closed.
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleGetTickets()}
+                            className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                            style={{
+                              background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
+                            }}
+                          >
+                            <Ticket className="h-5 w-5" />
+                            Buy Tickets
+                          </button>
+                        ))
+                      )}
+
+                      {/* Share */}
+                      <div className="flex gap-3">
                         <button
-                          onClick={handleGetSeatTickets}
-                          disabled={selectedSeats.length === 0}
-                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
+                          onClick={handleShare}
+                          className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
+                        >
+                          <Share2 className="h-4 w-4" />
+                          Share
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Organized by footer — tap to jump to the Organizer tab */}
+                    <button
+                      type="button"
+                      onClick={() => goToTab("organizer")}
+                      className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <p className="text-gray-400 text-xs font-medium mb-3">
+                        Organized by
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                           style={{
                             background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
                           }}
                         >
-                          <Ticket className="h-5 w-5" />
-                          {selectedSeats.length === 0
-                            ? "Select Seats"
-                            : `Buy ${selectedSeats.length} Seat${selectedSeats.length === 1 ? "" : "s"}`}
-                        </button>
-                      )
-                    ) : (
-                      visitorTypes &&
-                      visitorTypes.length > 0 &&
-                      (isEventOver(eventData) ? (
-                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-3 text-center text-sm font-medium text-gray-500">
-                          This event has ended — ticket sales are closed.
+                          {organizer.organizationName.charAt(0).toUpperCase()}
                         </div>
-                      ) : (
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate">
+                            {organizer.organizationName}
+                          </p>
+                          <p className="text-gray-400 text-xs">
+                            Event Organizer
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="p-5 sm:p-6">
+                      <p className="text-gray-900 font-bold text-lg mb-2">
+                        {title}
+                      </p>
+                      <p className="text-gray-500 text-sm mb-4">
+                        {new Date(startDate).toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                        {time ? ` · ${time}` : ""}
+                      </p>
+                      {location && (
+                        <p className="text-gray-600 text-sm mb-1">{location}</p>
+                      )}
+                      {address && (
+                        <p className="text-gray-400 text-xs mb-4">{address}</p>
+                      )}
+
+                      {/* Share */}
+                      <div className="flex gap-3">
                         <button
-                          onClick={() => handleGetTickets()}
-                          className="w-full h-12 sm:h-14 rounded-xl font-bold text-base text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 shadow-md hover:shadow-lg mb-3"
+                          onClick={handleShare}
+                          className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
+                        >
+                          <Share2 className="h-4 w-4" />
+                          Share
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Organized by footer — tap to jump to the Organizer tab */}
+                    <button
+                      type="button"
+                      onClick={() => goToTab("organizer")}
+                      className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <p className="text-gray-400 text-xs font-medium mb-3">
+                        Organized by
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                           style={{
                             background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
                           }}
                         >
-                          <Ticket className="h-5 w-5" />
-                          Buy Tickets
-                        </button>
-                      ))
-                    )}
-
-                    {/* Share */}
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleShare}
-                        className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
-                      >
-                        <Share2 className="h-4 w-4" />
-                        Share
-                      </button>
-                    </div>
+                          {organizer.organizationName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate">
+                            {organizer.organizationName}
+                          </p>
+                          <p className="text-gray-400 text-xs">
+                            Event Organizer
+                          </p>
+                        </div>
+                      </div>
+                    </button>
                   </div>
-
-                  {/* Organized by footer — tap to jump to the Organizer tab */}
-                  <button
-                    type="button"
-                    onClick={() => goToTab("organizer")}
-                    className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <p className="text-gray-400 text-xs font-medium mb-3">
-                      Organized by
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                        style={{
-                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
-                        }}
-                      >
-                        {organizer.organizationName.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 text-sm truncate">
-                          {organizer.organizationName}
-                        </p>
-                        <p className="text-gray-400 text-xs">Event Organizer</p>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                  <div className="p-5 sm:p-6">
-                    <p className="text-gray-900 font-bold text-lg mb-2">
-                      {title}
-                    </p>
-                    <p className="text-gray-500 text-sm mb-4">
-                      {new Date(startDate).toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                      {time ? ` · ${time}` : ""}
-                    </p>
-                    {location && (
-                      <p className="text-gray-600 text-sm mb-1">{location}</p>
-                    )}
-                    {address && (
-                      <p className="text-gray-400 text-xs mb-4">{address}</p>
-                    )}
-
-                    {/* Share */}
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleShare}
-                        className="flex-1 h-10 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-all"
-                      >
-                        <Share2 className="h-4 w-4" />
-                        Share
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Organized by footer — tap to jump to the Organizer tab */}
-                  <button
-                    type="button"
-                    onClick={() => goToTab("organizer")}
-                    className="w-full text-left border-t border-gray-100 px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <p className="text-gray-400 text-xs font-medium mb-3">
-                      Organized by
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                        style={{
-                          background: `linear-gradient(135deg, ${design?.primaryColor || "#f97316"}, ${design?.secondaryColor || "#ef4444"})`,
-                        }}
-                      >
-                        {organizer.organizationName.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 text-sm truncate">
-                          {organizer.organizationName}
-                        </p>
-                        <p className="text-gray-400 text-xs">Event Organizer</p>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              )}
+                )}
               </div>
 
               {/* ── Exhibitor Card — only if the event has spaces for sale
@@ -10186,148 +10223,149 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                      section, where the link next to "Become a member" has
                      nowhere to live. ── */}
               {sponsorTiersAvailable && !showStallCard && (
-                  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p className="text-gray-700 font-semibold text-sm mb-1">
-                      Become a Sponsor
-                    </p>
-                    <p className="text-gray-400 text-xs mb-4">
-                      Put your brand in front of everyone at this event.
-                    </p>
-                    <button
-                      onClick={() =>
-                        (eventData as any)?.isDemo
-                          ? setShowDemoPrompt(true)
-                          : setShowSponsorDialog(true)
-                      }
-                      className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
-                      style={{
-                        borderColor: design?.primaryColor || "#f97316",
-                        color: design?.primaryColor || "#f97316",
-                      }}
-                    >
-                      🤝 Become a Sponsor
-                    </button>
-                  </div>
-                )}
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-gray-700 font-semibold text-sm mb-1">
+                    Become a Sponsor
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Put your brand in front of everyone at this event.
+                  </p>
+                  <button
+                    onClick={() =>
+                      (eventData as any)?.isDemo
+                        ? setShowDemoPrompt(true)
+                        : setShowSponsorDialog(true)
+                    }
+                    className="w-full h-11 rounded-xl border-2 font-semibold text-sm transition-all hover:opacity-90"
+                    style={{
+                      borderColor: design?.primaryColor || "#f97316",
+                      color: design?.primaryColor || "#f97316",
+                    }}
+                  >
+                    🤝 Become a Sponsor
+                  </button>
+                </div>
+              )}
 
               <div className="hidden lg:block">
-              {/* ── Contact Organizer ── */}
-              {(() => {
-                // Came through an agent link? Show the agent, not the organizer.
-                const agentCard = renderReferralAgentCard();
-                if (agentCard) return agentCard;
-                // Resolve the list of phones to render. Prefer the new
-                // contactPhones array; fall back to the legacy single
-                // phoneNumber/phone fields so older organizer records
-                // keep showing something. Dedupe so a legacy primary
-                // copied into the array doesn't render twice.
-                const rawPhones: string[] = Array.isArray(
-                  (organizer as any).contactPhones,
-                )
-                  ? (organizer as any).contactPhones
-                  : [];
-                const rawNames: string[] = Array.isArray(
-                  (organizer as any).contactPhoneNames,
-                )
-                  ? (organizer as any).contactPhoneNames
-                  : [];
-                const legacy =
-                  (organizer as any).phoneNumber ||
-                  (organizer as any).phone ||
-                  "";
-                const seen = new Set<string>();
-                // Pair each number with its label (aligned by index); append
-                // the legacy single number (no label); dedupe by number.
-                const phoneEntries = [
-                  ...rawPhones.map((p, i) => ({
-                    phone: String(p || "").trim(),
-                    name: String(rawNames[i] || "").trim(),
-                  })),
-                  { phone: String(legacy || "").trim(), name: "" },
-                ].filter((e) => {
-                  if (!e.phone) return false;
-                  const k = e.phone.replace(/\s+/g, "");
-                  if (seen.has(k)) return false;
-                  seen.add(k);
-                  return true;
-                });
-                const showCard =
-                  phoneEntries.length > 0 ||
-                  organizer.email ||
-                  organizer.whatsAppNumber;
-                if (!showCard) return null;
-                return (
-                  <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                    <div className="px-5 pt-5 pb-4">
-                      <p
-                        className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
-                        style={{ color: design?.primaryColor }}
-                      >
-                        Contact Organizer
-                      </p>
-                      <div className="space-y-3">
-                        {phoneEntries.length > 0 && (
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                              <Phone className="h-3.5 w-3.5 text-gray-400" />
+                {/* ── Contact Organizer ── */}
+                {(() => {
+                  // Came through an agent link? Show the agent, not the organizer.
+                  const agentCard = renderReferralAgentCard();
+                  if (agentCard) return agentCard;
+                  // Resolve the list of phones to render. Prefer the new
+                  // contactPhones array; fall back to the legacy single
+                  // phoneNumber/phone fields so older organizer records
+                  // keep showing something. Dedupe so a legacy primary
+                  // copied into the array doesn't render twice.
+                  const rawPhones: string[] = Array.isArray(
+                    (organizer as any).contactPhones,
+                  )
+                    ? (organizer as any).contactPhones
+                    : [];
+                  const rawNames: string[] = Array.isArray(
+                    (organizer as any).contactPhoneNames,
+                  )
+                    ? (organizer as any).contactPhoneNames
+                    : [];
+                  const legacy =
+                    (organizer as any).phoneNumber ||
+                    (organizer as any).phone ||
+                    "";
+                  const seen = new Set<string>();
+                  // Pair each number with its label (aligned by index); append
+                  // the legacy single number (no label); dedupe by number.
+                  const phoneEntries = [
+                    ...rawPhones.map((p, i) => ({
+                      phone: String(p || "").trim(),
+                      name: String(rawNames[i] || "").trim(),
+                    })),
+                    { phone: String(legacy || "").trim(), name: "" },
+                  ].filter((e) => {
+                    if (!e.phone) return false;
+                    const k = e.phone.replace(/\s+/g, "");
+                    if (seen.has(k)) return false;
+                    seen.add(k);
+                    return true;
+                  });
+                  const showCard =
+                    phoneEntries.length > 0 ||
+                    organizer.email ||
+                    organizer.whatsAppNumber;
+                  if (!showCard) return null;
+                  return (
+                    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                      <div className="px-5 pt-5 pb-4">
+                        <p
+                          className="text-sm sm:text-lg font-bold tracking-widest uppercase mb-4"
+                          style={{ color: design?.primaryColor }}
+                        >
+                          Contact Organizer
+                        </p>
+                        <div className="space-y-3">
+                          {phoneEntries.length > 0 && (
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <Phone className="h-3.5 w-3.5 text-gray-400" />
+                              </div>
+                              <div className="text-sm font-medium flex flex-col gap-1">
+                                {phoneEntries.map((e, idx) => (
+                                  <a
+                                    key={`p-${idx}`}
+                                    href={`tel:${e.phone.replace(/\s+/g, "")}`}
+                                    className="hover:underline"
+                                    style={{
+                                      color:
+                                        design?.secondaryColor || "#ef4444",
+                                    }}
+                                  >
+                                    {e.name && (
+                                      <span className="text-gray-700 font-semibold mr-1.5">
+                                        {e.name}:
+                                      </span>
+                                    )}
+                                    {e.phone}
+                                  </a>
+                                ))}
+                              </div>
                             </div>
-                            <div className="text-sm font-medium flex flex-col gap-1">
-                              {phoneEntries.map((e, idx) => (
-                                <a
-                                  key={`p-${idx}`}
-                                  href={`tel:${e.phone.replace(/\s+/g, "")}`}
-                                  className="hover:underline"
-                                  style={{
-                                    color: design?.secondaryColor || "#ef4444",
-                                  }}
-                                >
-                                  {e.name && (
-                                    <span className="text-gray-700 font-semibold mr-1.5">
-                                      {e.name}:
-                                    </span>
-                                  )}
-                                  {e.phone}
-                                </a>
-                              ))}
+                          )}
+                          {organizer.email && (
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <Mail className="h-3.5 w-3.5 text-gray-400" />
+                              </div>
+                              <a
+                                href={`mailto:${organizer.email}`}
+                                className="text-sm font-medium hover:underline break-all"
+                                style={{
+                                  color: design?.secondaryColor || "#ef4444",
+                                }}
+                              >
+                                {organizer.email}
+                              </a>
                             </div>
-                          </div>
-                        )}
-                        {organizer.email && (
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                              <Mail className="h-3.5 w-3.5 text-gray-400" />
+                          )}
+                          {organizer.whatsAppNumber && (
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                <FaWhatsapp className="h-3.5 w-3.5 text-green-500" />
+                              </div>
+                              <a
+                                href={`https://wa.me/${organizer.whatsAppNumber.replace(/\D/g, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
+                              >
+                                {organizer.whatsAppNumber}
+                              </a>
                             </div>
-                            <a
-                              href={`mailto:${organizer.email}`}
-                              className="text-sm font-medium hover:underline break-all"
-                              style={{
-                                color: design?.secondaryColor || "#ef4444",
-                              }}
-                            >
-                              {organizer.email}
-                            </a>
-                          </div>
-                        )}
-                        {organizer.whatsAppNumber && (
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                              <FaWhatsapp className="h-3.5 w-3.5 text-green-500" />
-                            </div>
-                            <a
-                              href={`https://wa.me/${organizer.whatsAppNumber.replace(/\D/g, "")}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
-                            >
-                              {organizer.whatsAppNumber}
-                            </a>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
               </div>
 
               {/* Follow Us — separate card below Contact Organizer so
@@ -10728,7 +10766,6 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <h3 className="font-semibold text-lg text-gray-900">
                       {organizer.organizationName}
                     </h3>
-                    <p className="text-gray-500 text-sm">{organizer.name}</p>
                     {(organizer.description || organizer.bio) && (
                       <p className="text-gray-400 text-sm mt-2 leading-relaxed whitespace-pre-line">
                         {organizer.description || organizer.bio}
@@ -11236,8 +11273,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           width: stageW,
                                           height: stageH,
                                           borderRadius:
-                                            vc?.mainStageShape ===
-                                            "semicircle"
+                                            vc?.mainStageShape === "semicircle"
                                               ? "0 0 50% 50% / 0 0 100% 100%"
                                               : vc?.mainStageShape === "circle"
                                                 ? "50%"
@@ -11434,7 +11470,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     // Which seats are taken is only revealed after Google sign-in —
                                     // until then every table reads as open (see canSeeRoundTableAvailability).
                                     const bookedChairs: number[] =
-                                      canSeeRoundTableAvailability ? rt.bookedChairs || [] : [];
+                                      canSeeRoundTableAvailability
+                                        ? rt.bookedChairs || []
+                                        : [];
                                     const isReference = rt.forSale === false;
                                     const mySelection =
                                       roundTableSelections.find(
@@ -11446,7 +11484,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                     const isFullyBooked =
                                       canSeeRoundTableAvailability &&
                                       (rt.isFullyBooked ||
-                                      bookedChairs.length >= rt.numberOfChairs);
+                                        bookedChairs.length >=
+                                          rt.numberOfChairs);
                                     const diameter = rt.tableDiameter || 120;
                                     const chairSz = Math.max(
                                       12,
@@ -11734,12 +11773,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   const tpl = tpls.find(
                                     (x: any) => x?.id === (t as any).id,
                                   );
-                                  const name =
-                                    tpl?.name || t.type || "Space";
+                                  const name = tpl?.name || t.type || "Space";
                                   const color =
-                                    (t as any).color ||
-                                    tpl?.color ||
-                                    "#22c55e";
+                                    (t as any).color || tpl?.color || "#22c55e";
                                   const regular = t.tablePrice ?? 0;
                                   const member =
                                     (t as any).memberPrice != null
@@ -11808,8 +11844,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                           {hasMember ? (
                                             <div className="text-[10px] whitespace-nowrap">
                                               <span className="font-medium text-emerald-600">
-                                                Member{" "}
-                                                {formatPrice(e.member!)}
+                                                Member {formatPrice(e.member!)}
                                               </span>
                                               <span className="text-gray-400">
                                                 {" "}
@@ -11883,7 +11918,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 round table is actually sellable; "not for sale" round tables
                 are layout references only, so the box is hidden for them. */}
               {roundTableData.some((rt: any) => rt.forSale !== false) && (
-                <div ref={roundTableSectionRef} className="space-y-5 scroll-mt-4">
+                <div
+                  ref={roundTableSectionRef}
+                  className="space-y-5 scroll-mt-4"
+                >
                   {/* Header */}
                   <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
@@ -12174,7 +12212,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         top: vc.mainStageY ?? 0,
                                         left:
                                           vc.mainStageX ??
-                                          (canvasW - (vc.mainStageWidth ?? 200)) /
+                                          (canvasW -
+                                            (vc.mainStageWidth ?? 200)) /
                                             2,
                                         width: vc.mainStageWidth ?? 200,
                                         height: vc.mainStageHeight ?? 50,
@@ -12203,7 +12242,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   // Which seats are taken is only revealed after Google sign-in —
                                   // until then every table reads as open (see canSeeRoundTableAvailability).
                                   const bookedChairs: number[] =
-                                    canSeeRoundTableAvailability ? rt.bookedChairs || [] : [];
+                                    canSeeRoundTableAvailability
+                                      ? rt.bookedChairs || []
+                                      : [];
                                   const mySelection = roundTableSelections.find(
                                     (sel) =>
                                       sel.tablePositionId === rt.positionId,
@@ -12213,7 +12254,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                   const isFullyBooked =
                                     canSeeRoundTableAvailability &&
                                     (rt.isFullyBooked ||
-                                    bookedChairs.length >= rt.numberOfChairs);
+                                      bookedChairs.length >= rt.numberOfChairs);
                                   const d = Math.round(
                                     (rt.tableDiameter || 120) * 0.55,
                                   );
@@ -12692,180 +12733,188 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </div>
 
                         {/* Per-seat guest details — collapsible, optional */}
-                        {roundTableOn("seatGuests") && (() => {
-                          const totalSeats = roundTableSelections.reduce(
-                            (s, sel) => s + sel.selectedChairIndices.length,
-                            0,
-                          );
-                          const filledGuests = Object.values(rtSeatGuests)
-                            .flatMap((chairs) => Object.values(chairs))
-                            .filter((g) => g.name.trim()).length;
-                          return (
-                            <div className="rounded-xl border border-gray-100 overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() => setShowGuestForm(!showGuestForm)}
-                                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors text-left"
-                              >
-                                <div>
-                                  <p className="text-xs font-semibold text-gray-700">
-                                    Add Guest Details
-                                  </p>
-                                  <p className="text-[10px] text-gray-400 mt-0.5">
-                                    {filledGuests > 0
-                                      ? `${filledGuests} of ${totalSeats} guests added — each gets their own QR via WhatsApp`
-                                      : `Optional`}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {filledGuests > 0 && (
-                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                                      {filledGuests}/{totalSeats}
-                                    </span>
-                                  )}
-                                  <span
-                                    className={`text-gray-400 text-sm transition-transform ${showGuestForm ? "rotate-180" : ""}`}
-                                  >
-                                    &#9662;
-                                  </span>
-                                </div>
-                              </button>
-                              {showGuestForm && (
-                                <div className="p-3 space-y-3 border-t border-gray-100">
-                                  {roundTableSelections.map((sel) => (
-                                    <div
-                                      key={sel.tablePositionId}
-                                      className="space-y-2"
+                        {roundTableOn("seatGuests") &&
+                          (() => {
+                            const totalSeats = roundTableSelections.reduce(
+                              (s, sel) => s + sel.selectedChairIndices.length,
+                              0,
+                            );
+                            const filledGuests = Object.values(rtSeatGuests)
+                              .flatMap((chairs) => Object.values(chairs))
+                              .filter((g) => g.name.trim()).length;
+                            return (
+                              <div className="rounded-xl border border-gray-100 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setShowGuestForm(!showGuestForm)
+                                  }
+                                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors text-left"
+                                >
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-700">
+                                      Add Guest Details
+                                    </p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">
+                                      {filledGuests > 0
+                                        ? `${filledGuests} of ${totalSeats} guests added — each gets their own QR via WhatsApp`
+                                        : `Optional`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {filledGuests > 0 && (
+                                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                        {filledGuests}/{totalSeats}
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`text-gray-400 text-sm transition-transform ${showGuestForm ? "rotate-180" : ""}`}
                                     >
-                                      <p className="text-xs font-semibold text-gray-600 flex items-center gap-2">
-                                        <span
-                                          className="w-2 h-2 rounded-full"
-                                          style={{ backgroundColor: sel.color }}
-                                        />
-                                        {sel.tableName} — {sel.tableCategory}
-                                      </p>
-                                      {sel.selectedChairIndices.map(
-                                        (chairIdx) => {
-                                          const guest = rtSeatGuests[
-                                            sel.tablePositionId
-                                          ]?.[chairIdx] || {
-                                            name: "",
-                                            whatsApp: "",
-                                            email: "",
-                                          };
-                                          const updateGuest = (
-                                            field: string,
-                                            value: string,
-                                          ) => {
-                                            setRtSeatGuests((prev) => ({
-                                              ...prev,
-                                              [sel.tablePositionId]: {
-                                                ...prev[sel.tablePositionId],
-                                                [chairIdx]: {
-                                                  ...guest,
-                                                  [field]: value,
+                                      &#9662;
+                                    </span>
+                                  </div>
+                                </button>
+                                {showGuestForm && (
+                                  <div className="p-3 space-y-3 border-t border-gray-100">
+                                    {roundTableSelections.map((sel) => (
+                                      <div
+                                        key={sel.tablePositionId}
+                                        className="space-y-2"
+                                      >
+                                        <p className="text-xs font-semibold text-gray-600 flex items-center gap-2">
+                                          <span
+                                            className="w-2 h-2 rounded-full"
+                                            style={{
+                                              backgroundColor: sel.color,
+                                            }}
+                                          />
+                                          {sel.tableName} — {sel.tableCategory}
+                                        </p>
+                                        {sel.selectedChairIndices.map(
+                                          (chairIdx) => {
+                                            const guest = rtSeatGuests[
+                                              sel.tablePositionId
+                                            ]?.[chairIdx] || {
+                                              name: "",
+                                              whatsApp: "",
+                                              email: "",
+                                            };
+                                            const updateGuest = (
+                                              field: string,
+                                              value: string,
+                                            ) => {
+                                              setRtSeatGuests((prev) => ({
+                                                ...prev,
+                                                [sel.tablePositionId]: {
+                                                  ...prev[sel.tablePositionId],
+                                                  [chairIdx]: {
+                                                    ...guest,
+                                                    [field]: value,
+                                                  },
                                                 },
-                                              },
-                                            }));
-                                          };
-                                          const isFilled =
-                                            guest.name.trim().length > 0;
-                                          return (
-                                            <div
-                                              key={`${sel.tablePositionId}-${chairIdx}`}
-                                              className={`rounded-lg border p-3 transition-colors ${isFilled ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}
-                                            >
-                                              <p className="text-[10px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
-                                                <span
-                                                  className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px]"
-                                                  style={{
-                                                    backgroundColor: isFilled
-                                                      ? "#22c55e"
-                                                      : sel.color,
-                                                  }}
-                                                >
-                                                  {chairIdx + 1}
-                                                </span>
-                                                Seat {chairIdx + 1}
-                                                {isFilled && (
-                                                  <span className="text-green-600 text-[9px] ml-auto">
-                                                    &#10003;
+                                              }));
+                                            };
+                                            const isFilled =
+                                              guest.name.trim().length > 0;
+                                            return (
+                                              <div
+                                                key={`${sel.tablePositionId}-${chairIdx}`}
+                                                className={`rounded-lg border p-3 transition-colors ${isFilled ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}
+                                              >
+                                                <p className="text-[10px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
+                                                  <span
+                                                    className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[8px]"
+                                                    style={{
+                                                      backgroundColor: isFilled
+                                                        ? "#22c55e"
+                                                        : sel.color,
+                                                    }}
+                                                  >
+                                                    {chairIdx + 1}
                                                   </span>
-                                                )}
-                                              </p>
-                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                                <input
-                                                  type="text"
-                                                  placeholder="Guest Name"
-                                                  value={guest.name}
-                                                  onChange={(e) =>
-                                                    updateGuest(
-                                                      "name",
-                                                      e.target.value,
-                                                    )
-                                                  }
-                                                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                                />
-                                                <PhoneInput
-                                                  value={guest.whatsApp}
-                                                  onChange={(value) =>
-                                                    updateGuest(
-                                                      "whatsApp",
-                                                      value,
-                                                    )
-                                                  }
-                                                  enableSearch={true}
-                                                  countryCodeEditable={false}
-                                                  preferredCountries={[
-                                                    "in",
-                                                    "sg",
-                                                    "us",
-                                                    "gb",
-                                                    "ae",
-                                                  ]}
-                                                  inputProps={{
-                                                    name: `seat-phone-${chairIdx}`,
-                                                  }}
-                                                  inputStyle={{
-                                                    width: "100%",
-                                                    height: "34px",
-                                                    borderRadius: "8px",
-                                                    fontSize: "12px",
-                                                    border: "1px solid #e5e7eb",
-                                                  }}
-                                                  containerStyle={{
-                                                    width: "100%",
-                                                  }}
-                                                  buttonStyle={{
-                                                    borderRadius: "8px 0 0 8px",
-                                                    border: "1px solid #e5e7eb",
-                                                    height: "34px",
-                                                  }}
-                                                />
-                                                <input
-                                                  type="email"
-                                                  placeholder="Email"
-                                                  value={guest.email}
-                                                  onChange={(e) =>
-                                                    updateGuest(
-                                                      "email",
-                                                      e.target.value,
-                                                    )
-                                                  }
-                                                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                                />
+                                                  Seat {chairIdx + 1}
+                                                  {isFilled && (
+                                                    <span className="text-green-600 text-[9px] ml-auto">
+                                                      &#10003;
+                                                    </span>
+                                                  )}
+                                                </p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Guest Name"
+                                                    value={guest.name}
+                                                    onChange={(e) =>
+                                                      updateGuest(
+                                                        "name",
+                                                        e.target.value,
+                                                      )
+                                                    }
+                                                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                  />
+                                                  <PhoneInput
+                                                    value={guest.whatsApp}
+                                                    onChange={(value) =>
+                                                      updateGuest(
+                                                        "whatsApp",
+                                                        value,
+                                                      )
+                                                    }
+                                                    enableSearch={true}
+                                                    countryCodeEditable={false}
+                                                    preferredCountries={[
+                                                      "in",
+                                                      "sg",
+                                                      "us",
+                                                      "gb",
+                                                      "ae",
+                                                    ]}
+                                                    inputProps={{
+                                                      name: `seat-phone-${chairIdx}`,
+                                                    }}
+                                                    inputStyle={{
+                                                      width: "100%",
+                                                      height: "34px",
+                                                      borderRadius: "8px",
+                                                      fontSize: "12px",
+                                                      border:
+                                                        "1px solid #e5e7eb",
+                                                    }}
+                                                    containerStyle={{
+                                                      width: "100%",
+                                                    }}
+                                                    buttonStyle={{
+                                                      borderRadius:
+                                                        "8px 0 0 8px",
+                                                      border:
+                                                        "1px solid #e5e7eb",
+                                                      height: "34px",
+                                                    }}
+                                                  />
+                                                  <input
+                                                    type="email"
+                                                    placeholder="Email"
+                                                    value={guest.email}
+                                                    onChange={(e) =>
+                                                      updateGuest(
+                                                        "email",
+                                                        e.target.value,
+                                                      )
+                                                    }
+                                                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                  />
+                                                </div>
                                               </div>
-                                            </div>
-                                          );
-                                        },
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
+                                            );
+                                          },
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                         {/* Book button */}
                         <button
@@ -12955,7 +13004,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                             }),
                                         visitorName: rtVisitorInfo.name,
                                         visitorEmail: rtVisitorInfo.email,
-                                        visitorPhone: toE164(rtVisitorInfo.phone),
+                                        visitorPhone: toE164(
+                                          rtVisitorInfo.phone,
+                                        ),
                                         seatGuests: seatGuestsForTable,
                                         referralCode,
                                       }),
@@ -13590,70 +13641,70 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                       {/* Photo */}
                       {speakerOn("image") && (
-                      <div className="flex items-center gap-4">
-                        <div
-                          className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
-                          onClick={() =>
-                            document
-                              .getElementById("speaker-apply-photo")
-                              ?.click()
-                          }
-                        >
-                          {speakerFormData.photoPreview ||
-                          speakerFormData.image ? (
-                            <img
-                              src={
-                                speakerFormData.photoPreview ||
-                                (speakerFormData.image?.startsWith("/")
-                                  ? `${apiURL?.replace("/api", "")}${speakerFormData.image}`
-                                  : speakerFormData.image)
-                              }
-                              alt="Your photo"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="text-center">
-                              <svg
-                                className="mx-auto h-6 w-6 text-gray-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                                />
-                              </svg>
-                              <span className="text-[9px] text-gray-400">
-                                Photo
-                              </span>
-                            </div>
-                          )}
+                        <div className="flex items-center gap-4">
+                          <div
+                            className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50 flex-shrink-0"
+                            onClick={() =>
+                              document
+                                .getElementById("speaker-apply-photo")
+                                ?.click()
+                            }
+                          >
+                            {speakerFormData.photoPreview ||
+                            speakerFormData.image ? (
+                              <img
+                                src={
+                                  speakerFormData.photoPreview ||
+                                  (speakerFormData.image?.startsWith("/")
+                                    ? `${apiURL?.replace("/api", "")}${speakerFormData.image}`
+                                    : speakerFormData.image)
+                                }
+                                alt="Your photo"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="text-center">
+                                <svg
+                                  className="mx-auto h-6 w-6 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                                  />
+                                </svg>
+                                <span className="text-[9px] text-gray-400">
+                                  Photo
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <input
+                            id="speaker-apply-photo"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              // Crop before keeping it — the photo ends up in a
+                              // circular avatar on the event page.
+                              if (file)
+                                setSpeakerPhotoCrop(URL.createObjectURL(file));
+                              // Let the same file be re-picked after a cancel.
+                              e.target.value = "";
+                            }}
+                          />
+                          <div className="text-xs text-gray-500">
+                            <p className="font-medium text-gray-700">
+                              Upload your photo
+                            </p>
+                            <p>This will be displayed on the event page</p>
+                          </div>
                         </div>
-                        <input
-                          id="speaker-apply-photo"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            // Crop before keeping it — the photo ends up in a
-                            // circular avatar on the event page.
-                            if (file)
-                              setSpeakerPhotoCrop(URL.createObjectURL(file));
-                            // Let the same file be re-picked after a cancel.
-                            e.target.value = "";
-                          }}
-                        />
-                        <div className="text-xs text-gray-500">
-                          <p className="font-medium text-gray-700">
-                            Upload your photo
-                          </p>
-                          <p>This will be displayed on the event page</p>
-                        </div>
-                      </div>
                       )}
 
                       <ReferralCodeField
@@ -13701,174 +13752,177 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </div>
 
                       {speakerOn("phone") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Phone / WhatsApp (optional)
-                        </label>
-                        {/* Contact detail only — never used to sign in. */}
-                        <PhoneInput
-                          value={speakerFormData.phone}
-                          onChange={(v: string) =>
-                            setSpeakerFormData((p: any) => ({ ...p, phone: v }))
-                          }
-                          enableSearch={true}
-                          countryCodeEditable={false}
-                          preferredCountries={["in", "sg", "us", "gb"]}
-                          inputProps={{ name: "speakerPhone" }}
-                          inputStyle={{
-                            width: "100%",
-                            height: "40px",
-                            fontSize: "14px",
-                            paddingLeft: "48px",
-                            borderRadius: "8px",
-                            border: "1px solid #e2e8f0",
-                          }}
-                          containerStyle={{ width: "100%" }}
-                          buttonStyle={{
-                            borderRadius: "8px 0 0 8px",
-                            border: "1px solid #e2e8f0",
-                            borderRight: "none",
-                          }}
-                        />
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          So the organizer can reach you about your session.
-                        </p>
-                      </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Phone / WhatsApp (optional)
+                          </label>
+                          {/* Contact detail only — never used to sign in. */}
+                          <PhoneInput
+                            value={speakerFormData.phone}
+                            onChange={(v: string) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                phone: v,
+                              }))
+                            }
+                            enableSearch={true}
+                            countryCodeEditable={false}
+                            preferredCountries={["in", "sg", "us", "gb"]}
+                            inputProps={{ name: "speakerPhone" }}
+                            inputStyle={{
+                              width: "100%",
+                              height: "40px",
+                              fontSize: "14px",
+                              paddingLeft: "48px",
+                              borderRadius: "8px",
+                              border: "1px solid #e2e8f0",
+                            }}
+                            containerStyle={{ width: "100%" }}
+                            buttonStyle={{
+                              borderRadius: "8px 0 0 8px",
+                              border: "1px solid #e2e8f0",
+                              borderRight: "none",
+                            }}
+                          />
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            So the organizer can reach you about your session.
+                          </p>
+                        </div>
                       )}
 
                       {(speakerOn("title") || speakerOn("organization")) && (
-                      <div className="grid grid-cols-2 gap-3">
-                        {speakerOn("title") && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-700 block mb-1">
-                            Role / Title
-                          </label>
-                          <input
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                            placeholder="e.g. CTO, Professor"
-                            value={speakerFormData.title}
-                            onChange={(e) =>
-                              setSpeakerFormData((p: any) => ({
-                                ...p,
-                                title: e.target.value,
-                              }))
-                            }
-                          />
+                        <div className="grid grid-cols-2 gap-3">
+                          {speakerOn("title") && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-700 block mb-1">
+                                Role / Title
+                              </label>
+                              <input
+                                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                placeholder="e.g. CTO, Professor"
+                                value={speakerFormData.title}
+                                onChange={(e) =>
+                                  setSpeakerFormData((p: any) => ({
+                                    ...p,
+                                    title: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          )}
+                          {speakerOn("organization") && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-700 block mb-1">
+                                Company / Organization
+                              </label>
+                              <input
+                                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                placeholder="Company / University"
+                                value={speakerFormData.organization}
+                                onChange={(e) =>
+                                  setSpeakerFormData((p: any) => ({
+                                    ...p,
+                                    organization: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          )}
                         </div>
-                        )}
-                        {speakerOn("organization") && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-700 block mb-1">
-                            Company / Organization
-                          </label>
-                          <input
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                            placeholder="Company / University"
-                            value={speakerFormData.organization}
-                            onChange={(e) =>
-                              setSpeakerFormData((p: any) => ({
-                                ...p,
-                                organization: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        )}
-                      </div>
                       )}
 
                       {speakerOn("bio") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Bio
-                        </label>
-                        <textarea
-                          rows={2}
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-                          placeholder="Brief bio about yourself..."
-                          value={speakerFormData.bio}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              bio: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Bio
+                          </label>
+                          <textarea
+                            rows={2}
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                            placeholder="Brief bio about yourself..."
+                            value={speakerFormData.bio}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                bio: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       )}
 
                       {speakerOn("expertise") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Area of Expertise
-                        </label>
-                        <input
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                          placeholder="e.g. AI/ML, Marketing, Finance"
-                          value={speakerFormData.expertise}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              expertise: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Area of Expertise
+                          </label>
+                          <input
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="e.g. AI/ML, Marketing, Finance"
+                            value={speakerFormData.expertise}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                expertise: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       )}
 
                       {(speakerOn("linkedin") ||
                         speakerOn("twitter") ||
                         speakerOn("website")) && (
-                      <div className="grid grid-cols-3 gap-2">
-                        {speakerOn("linkedin") && (
-                        <input
-                          className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                          placeholder="LinkedIn URL"
-                          value={speakerFormData.socialLinks.linkedin}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              socialLinks: {
-                                ...p.socialLinks,
-                                linkedin: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                        )}
-                        {speakerOn("twitter") && (
-                        <input
-                          className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                          placeholder="Twitter URL"
-                          value={speakerFormData.socialLinks.twitter}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              socialLinks: {
-                                ...p.socialLinks,
-                                twitter: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                        )}
-                        {speakerOn("website") && (
-                        <input
-                          className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                          placeholder="Website URL"
-                          value={speakerFormData.socialLinks.website}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              socialLinks: {
-                                ...p.socialLinks,
-                                website: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                        )}
-                      </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {speakerOn("linkedin") && (
+                            <input
+                              className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                              placeholder="LinkedIn URL"
+                              value={speakerFormData.socialLinks.linkedin}
+                              onChange={(e) =>
+                                setSpeakerFormData((p: any) => ({
+                                  ...p,
+                                  socialLinks: {
+                                    ...p.socialLinks,
+                                    linkedin: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          )}
+                          {speakerOn("twitter") && (
+                            <input
+                              className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                              placeholder="Twitter URL"
+                              value={speakerFormData.socialLinks.twitter}
+                              onChange={(e) =>
+                                setSpeakerFormData((p: any) => ({
+                                  ...p,
+                                  socialLinks: {
+                                    ...p.socialLinks,
+                                    twitter: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          )}
+                          {speakerOn("website") && (
+                            <input
+                              className="border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                              placeholder="Website URL"
+                              value={speakerFormData.socialLinks.website}
+                              onChange={(e) =>
+                                setSpeakerFormData((p: any) => ({
+                                  ...p,
+                                  socialLinks: {
+                                    ...p.socialLinks,
+                                    website: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -13893,60 +13947,60 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         />
                       </div>
                       {speakerOn("sessionDescription") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Session Description
-                        </label>
-                        <textarea
-                          rows={3}
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-                          placeholder="What will the audience take away?"
-                          value={speakerFormData.sessionDescription}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              sessionDescription: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Session Description
+                          </label>
+                          <textarea
+                            rows={3}
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                            placeholder="What will the audience take away?"
+                            value={speakerFormData.sessionDescription}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                sessionDescription: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       )}
                       {speakerOn("previousSpeakingExperience") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Previous Speaking Experience
-                        </label>
-                        <textarea
-                          rows={2}
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
-                          placeholder="List conferences, events, or talks you've given..."
-                          value={speakerFormData.previousSpeakingExperience}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              previousSpeakingExperience: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Previous Speaking Experience
+                          </label>
+                          <textarea
+                            rows={2}
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                            placeholder="List conferences, events, or talks you've given..."
+                            value={speakerFormData.previousSpeakingExperience}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                previousSpeakingExperience: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       )}
                       {speakerOn("equipmentNeeded") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Equipment Needed
-                        </label>
-                        <input
-                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                          placeholder="e.g. Projector, Whiteboard, Microphone"
-                          value={speakerFormData.equipmentNeeded}
-                          onChange={(e) =>
-                            setSpeakerFormData((p: any) => ({
-                              ...p,
-                              equipmentNeeded: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Equipment Needed
+                          </label>
+                          <input
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="e.g. Projector, Whiteboard, Microphone"
+                            value={speakerFormData.equipmentNeeded}
+                            onChange={(e) =>
+                              setSpeakerFormData((p: any) => ({
+                                ...p,
+                                equipmentNeeded: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       )}
                     </div>
                   )}
@@ -14018,9 +14072,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                         : "text-green-600"
                                     }`}
                                   >
-                                    {price > 0
-                                      ? formatPrice(price)
-                                      : "Free"}
+                                    {price > 0 ? formatPrice(price) : "Free"}
                                   </span>
                                 </div>
                               </button>
@@ -14037,57 +14089,58 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
                       {(speakerOn("preferredStartTime") ||
                         speakerOn("preferredEndTime")) && (
-                      <div className="grid grid-cols-2 gap-3">
-                        {speakerOn("preferredStartTime") && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-700 block mb-1">
-                            Preferred Start Time
-                          </label>
-                          <input
-                            type="time"
-                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={speakerFormData.preferredStartTime}
-                            min={eventData?.time || undefined}
-                            max={eventData?.endTime || undefined}
-                            onChange={(e) =>
-                              setSpeakerFormData((p: any) => ({
-                                ...p,
-                                preferredStartTime: e.target.value,
-                              }))
-                            }
-                          />
-                          {eventData?.time && (
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              Event runs {eventData.time} - {eventData.endTime}
-                            </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {speakerOn("preferredStartTime") && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-700 block mb-1">
+                                Preferred Start Time
+                              </label>
+                              <input
+                                type="time"
+                                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                value={speakerFormData.preferredStartTime}
+                                min={eventData?.time || undefined}
+                                max={eventData?.endTime || undefined}
+                                onChange={(e) =>
+                                  setSpeakerFormData((p: any) => ({
+                                    ...p,
+                                    preferredStartTime: e.target.value,
+                                  }))
+                                }
+                              />
+                              {eventData?.time && (
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  Event runs {eventData.time} -{" "}
+                                  {eventData.endTime}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {speakerOn("preferredEndTime") && (
+                            <div>
+                              <label className="text-xs font-medium text-gray-700 block mb-1">
+                                Preferred End Time
+                              </label>
+                              <input
+                                type="time"
+                                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                                value={speakerFormData.preferredEndTime}
+                                min={
+                                  speakerFormData.preferredStartTime ||
+                                  eventData?.time ||
+                                  undefined
+                                }
+                                max={eventData?.endTime || undefined}
+                                onChange={(e) =>
+                                  setSpeakerFormData((p: any) => ({
+                                    ...p,
+                                    preferredEndTime: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
                           )}
                         </div>
-                        )}
-                        {speakerOn("preferredEndTime") && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-700 block mb-1">
-                            Preferred End Time
-                          </label>
-                          <input
-                            type="time"
-                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                            value={speakerFormData.preferredEndTime}
-                            min={
-                              speakerFormData.preferredStartTime ||
-                              eventData?.time ||
-                              undefined
-                            }
-                            max={eventData?.endTime || undefined}
-                            onChange={(e) =>
-                              setSpeakerFormData((p: any) => ({
-                                ...p,
-                                preferredEndTime: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        )}
-                      </div>
                       )}
 
                       {bookedSpeakerSlots.length > 0 && (
@@ -14342,9 +14395,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           </p>
                         )}
                         <p>
-                          <span className="text-gray-500">
-                            Visitor price:
-                          </span>{" "}
+                          <span className="text-gray-500">Visitor price:</span>{" "}
                           <span className="font-medium">
                             {req.finalPrice > 0
                               ? formatPrice(req.finalPrice)
@@ -14374,8 +14425,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             </p>
                           </div>
                           <p className="text-[10px] text-gray-400 mt-1">
-                            This is what the organizer owes you so far —
-                            they'll pay it to the account you provided.
+                            This is what the organizer owes you so far — they'll
+                            pay it to the account you provided.
                           </p>
                         </div>
                       )}
@@ -14407,44 +14458,44 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <div className="space-y-4">
                   {/* Photo */}
                   {workshopOn("photoFile") && (
-                  <div className="flex flex-col items-center gap-1">
-                    <div
-                      className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
-                      onClick={() =>
-                        document
-                          .getElementById("workshop-host-photo")
-                          ?.click()
-                      }
-                    >
-                      {workshopHostFormData.photoPreview ? (
-                        <img
-                          src={workshopHostFormData.photoPreview}
-                          alt="Host"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Upload className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <input
-                      id="workshop-host-photo"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setWorkshopHostCrop({
-                            url: URL.createObjectURL(file),
-                          });
+                    <div className="flex flex-col items-center gap-1">
+                      <div
+                        className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer hover:border-primary transition-colors bg-gray-50"
+                        onClick={() =>
+                          document
+                            .getElementById("workshop-host-photo")
+                            ?.click()
                         }
-                        e.target.value = "";
-                      }}
-                    />
-                    <span className="text-[9px] text-muted-foreground">
-                      Your photo (optional)
-                    </span>
-                  </div>
+                      >
+                        {workshopHostFormData.photoPreview ? (
+                          <img
+                            src={workshopHostFormData.photoPreview}
+                            alt="Host"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Upload className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <input
+                        id="workshop-host-photo"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setWorkshopHostCrop({
+                              url: URL.createObjectURL(file),
+                            });
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                      <span className="text-[9px] text-muted-foreground">
+                        Your photo (optional)
+                      </span>
+                    </div>
                   )}
 
                   <div>
@@ -14481,56 +14532,56 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
 
                   {workshopOn("hostPhone") && (
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 block mb-1">
-                      Phone / WhatsApp (optional)
-                    </label>
-                    <PhoneInput
-                      value={workshopHostFormData.hostPhone}
-                      onChange={(v: string) =>
-                        setWorkshopHostFormData((p) => ({
-                          ...p,
-                          hostPhone: v,
-                        }))
-                      }
-                      enableSearch={true}
-                      countryCodeEditable={false}
-                      preferredCountries={["in", "sg", "us", "gb"]}
-                      inputProps={{ name: "workshopHostPhone" }}
-                      inputStyle={{
-                        width: "100%",
-                        height: "40px",
-                        fontSize: "14px",
-                        paddingLeft: "48px",
-                        borderRadius: "8px",
-                        border: "1px solid #e2e8f0",
-                      }}
-                      containerStyle={{ width: "100%" }}
-                      buttonStyle={{
-                        borderRadius: "8px 0 0 8px",
-                      }}
-                    />
-                  </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Phone / WhatsApp (optional)
+                      </label>
+                      <PhoneInput
+                        value={workshopHostFormData.hostPhone}
+                        onChange={(v: string) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            hostPhone: v,
+                          }))
+                        }
+                        enableSearch={true}
+                        countryCodeEditable={false}
+                        preferredCountries={["in", "sg", "us", "gb"]}
+                        inputProps={{ name: "workshopHostPhone" }}
+                        inputStyle={{
+                          width: "100%",
+                          height: "40px",
+                          fontSize: "14px",
+                          paddingLeft: "48px",
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                        }}
+                        containerStyle={{ width: "100%" }}
+                        buttonStyle={{
+                          borderRadius: "8px 0 0 8px",
+                        }}
+                      />
+                    </div>
                   )}
 
                   {workshopOn("hostBio") && (
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 block mb-1">
-                      Your Bio
-                    </label>
-                    <textarea
-                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                      rows={2}
-                      value={workshopHostFormData.hostBio}
-                      onChange={(e) =>
-                        setWorkshopHostFormData((p) => ({
-                          ...p,
-                          hostBio: e.target.value,
-                        }))
-                      }
-                      placeholder="Who you are and why you're a good fit to run this workshop"
-                    />
-                  </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Your Bio
+                      </label>
+                      <textarea
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        rows={2}
+                        value={workshopHostFormData.hostBio}
+                        onChange={(e) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            hostBio: e.target.value,
+                          }))
+                        }
+                        placeholder="Who you are and why you're a good fit to run this workshop"
+                      />
+                    </div>
                   )}
 
                   <div className="border-t pt-4">
@@ -14550,161 +14601,161 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
 
                   {workshopOn("workshopDescription") && (
-                  <div>
-                    <label className="text-xs font-medium text-gray-700 block mb-1">
-                      Workshop Description
-                    </label>
-                    <textarea
-                      className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                      rows={3}
-                      value={workshopHostFormData.workshopDescription}
-                      onChange={(e) =>
-                        setWorkshopHostFormData((p) => ({
-                          ...p,
-                          workshopDescription: e.target.value,
-                        }))
-                      }
-                      placeholder="What visitors will learn, bring, or need to know"
-                    />
-                  </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Workshop Description
+                      </label>
+                      <textarea
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        rows={3}
+                        value={workshopHostFormData.workshopDescription}
+                        onChange={(e) =>
+                          setWorkshopHostFormData((p) => ({
+                            ...p,
+                            workshopDescription: e.target.value,
+                          }))
+                        }
+                        placeholder="What visitors will learn, bring, or need to know"
+                      />
+                    </div>
                   )}
 
                   {(workshopOn("proposedPrice") || workshopOn("maxSeats")) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {workshopOn("proposedPrice") && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Suggested Visitor Price
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={workshopHostFormData.proposedPrice}
-                        onChange={(e) =>
-                          setWorkshopHostFormData((p) => ({
-                            ...p,
-                            proposedPrice: e.target.value,
-                          }))
-                        }
-                        placeholder="0 = Free"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      {workshopOn("proposedPrice") && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Suggested Visitor Price
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={workshopHostFormData.proposedPrice}
+                            onChange={(e) =>
+                              setWorkshopHostFormData((p) => ({
+                                ...p,
+                                proposedPrice: e.target.value,
+                              }))
+                            }
+                            placeholder="0 = Free"
+                          />
+                        </div>
+                      )}
+                      {workshopOn("maxSeats") && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Max Seats
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={workshopHostFormData.maxSeats}
+                            onChange={(e) =>
+                              setWorkshopHostFormData((p) => ({
+                                ...p,
+                                maxSeats: e.target.value,
+                              }))
+                            }
+                            placeholder="Blank = unlimited"
+                          />
+                        </div>
+                      )}
                     </div>
-                    )}
-                    {workshopOn("maxSeats") && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Max Seats
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={workshopHostFormData.maxSeats}
-                        onChange={(e) =>
-                          setWorkshopHostFormData((p) => ({
-                            ...p,
-                            maxSeats: e.target.value,
-                          }))
-                        }
-                        placeholder="Blank = unlimited"
-                      />
-                    </div>
-                    )}
-                  </div>
                   )}
 
                   {/* Only relevant once the host has priced the workshop —
                       that's when the organizer needs somewhere to pay them. */}
                   {workshopOn("proposedPrice") &&
                     (Number(workshopHostFormData.proposedPrice) || 0) > 0 && (
-                    <div className="border-t pt-4 space-y-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Payout Account (this is a paid workshop)
-                      </p>
-                      {workshopOn("hostAccountName") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Account Holder Name *
-                        </label>
-                        <input
-                          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                          value={workshopHostFormData.hostAccountName}
-                          onChange={(e) =>
-                            setWorkshopHostFormData((p) => ({
-                              ...p,
-                              hostAccountName: e.target.value,
-                            }))
-                          }
-                          placeholder="Name on the account"
-                        />
-                      </div>
-                      )}
-                      {workshopOn("hostAccountDetails") && (
-                      <div>
-                        <label className="text-xs font-medium text-gray-700 block mb-1">
-                          Account Details *
-                        </label>
-                        <input
-                          className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                          value={workshopHostFormData.hostAccountDetails}
-                          onChange={(e) =>
-                            setWorkshopHostFormData((p) => ({
-                              ...p,
-                              hostAccountDetails: e.target.value,
-                            }))
-                          }
-                          placeholder="Bank account, UPI ID, or PayNow number"
-                        />
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          The organizer will use this to pay you for the
-                          workshop.
+                      <div className="border-t pt-4 space-y-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Payout Account (this is a paid workshop)
                         </p>
+                        {workshopOn("hostAccountName") && (
+                          <div>
+                            <label className="text-xs font-medium text-gray-700 block mb-1">
+                              Account Holder Name *
+                            </label>
+                            <input
+                              className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={workshopHostFormData.hostAccountName}
+                              onChange={(e) =>
+                                setWorkshopHostFormData((p) => ({
+                                  ...p,
+                                  hostAccountName: e.target.value,
+                                }))
+                              }
+                              placeholder="Name on the account"
+                            />
+                          </div>
+                        )}
+                        {workshopOn("hostAccountDetails") && (
+                          <div>
+                            <label className="text-xs font-medium text-gray-700 block mb-1">
+                              Account Details *
+                            </label>
+                            <input
+                              className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                              value={workshopHostFormData.hostAccountDetails}
+                              onChange={(e) =>
+                                setWorkshopHostFormData((p) => ({
+                                  ...p,
+                                  hostAccountDetails: e.target.value,
+                                }))
+                              }
+                              placeholder="Bank account, UPI ID, or PayNow number"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              The organizer will use this to pay you for the
+                              workshop.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      )}
-                    </div>
-                  )}
+                    )}
 
                   {(workshopOn("proposedStartTime") ||
                     workshopOn("proposedEndTime")) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {workshopOn("proposedStartTime") && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Start Time
-                      </label>
-                      <input
-                        type="time"
-                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={workshopHostFormData.proposedStartTime}
-                        onChange={(e) =>
-                          setWorkshopHostFormData((p) => ({
-                            ...p,
-                            proposedStartTime: e.target.value,
-                          }))
-                        }
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      {workshopOn("proposedStartTime") && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            Start Time
+                          </label>
+                          <input
+                            type="time"
+                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={workshopHostFormData.proposedStartTime}
+                            onChange={(e) =>
+                              setWorkshopHostFormData((p) => ({
+                                ...p,
+                                proposedStartTime: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
+                      {workshopOn("proposedEndTime") && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">
+                            End Time
+                          </label>
+                          <input
+                            type="time"
+                            className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+                            value={workshopHostFormData.proposedEndTime}
+                            onChange={(e) =>
+                              setWorkshopHostFormData((p) => ({
+                                ...p,
+                                proposedEndTime: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
-                    )}
-                    {workshopOn("proposedEndTime") && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        End Time
-                      </label>
-                      <input
-                        type="time"
-                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                        value={workshopHostFormData.proposedEndTime}
-                        onChange={(e) =>
-                          setWorkshopHostFormData((p) => ({
-                            ...p,
-                            proposedEndTime: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    )}
-                  </div>
                   )}
 
                   <button
@@ -14776,7 +14827,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Book a Seat / Table</DialogTitle>
-            <DialogDescription>Sign in with Google to continue.</DialogDescription>
+            <DialogDescription>
+              Sign in with Google to continue.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {roundTableGoogleLoading ? (
@@ -14795,8 +14848,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   Continue with Google
                 </Button>
                 <p className="text-[11px] text-muted-foreground text-center">
-                  We use your email to verify your booking and find any seats
-                  or tables you've already booked — already booked? Signing in
+                  We use your email to verify your booking and find any seats or
+                  tables you've already booked — already booked? Signing in
                   again takes you straight to your tickets.
                 </p>
               </>
@@ -14825,7 +14878,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               const badge =
                 {
                   Paid: "bg-emerald-100 text-emerald-700 border border-emerald-300",
-                  Submitted: "bg-amber-100 text-amber-700 border border-amber-300",
+                  Submitted:
+                    "bg-amber-100 text-amber-700 border border-amber-300",
                   Pending: "bg-gray-100 text-gray-700 border border-gray-300",
                 }[status] || "bg-gray-100 text-gray-700 border border-gray-300";
               const label =
@@ -14934,269 +14988,272 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
-          {scheduledSpaceStep === "auth" ? (
-            <div className="space-y-4 py-2">
-              {scheduledSpaceGoogleLoading ? (
-                <div className="py-6 text-center space-y-2">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
-                  <p className="text-sm text-muted-foreground">
-                    Looking you up…
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={handleScheduledSpaceGoogleLogin}
-                    className="w-full"
-                  >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Continue with Google
-                  </Button>
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    We use your email to verify your booking and find any
-                    existing request — already registered? Signing in again
-                    takes you straight to your status.
-                  </p>
-                </>
-              )}
-            </div>
-          ) : (
-            <form
-              onSubmit={handleScheduledSpaceFormSubmit}
-              className="space-y-4"
-            >
-              <ReferralCodeField
-                value={referralInput}
-                onChange={setReferralInput}
-                locked={referralLocked}
-                required={referralRequired}
-              />
-              <div>
-                <Label>Full Name *</Label>
-                <Input
-                  value={scheduledSpaceForm.name}
-                  onChange={(e) =>
-                    setScheduledSpaceForm((p) => ({
-                      ...p,
-                      name: e.target.value,
-                    }))
-                  }
-                  required
-                />
+            {scheduledSpaceStep === "auth" ? (
+              <div className="space-y-4 py-2">
+                {scheduledSpaceGoogleLoading ? (
+                  <div className="py-6 text-center space-y-2">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                    <p className="text-sm text-muted-foreground">
+                      Looking you up…
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={handleScheduledSpaceGoogleLogin}
+                      className="w-full"
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Continue with Google
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground text-center">
+                      We use your email to verify your booking and find any
+                      existing request — already registered? Signing in again
+                      takes you straight to your status.
+                    </p>
+                  </>
+                )}
               </div>
-              <div>
-                <Label>Email (verified with Google)</Label>
-                <Input
-                  type="email"
-                  value={scheduledSpaceForm.email}
-                  disabled
-                  className="bg-muted/50"
-                  title="Verified via Google sign-in — can't be changed"
+            ) : (
+              <form
+                onSubmit={handleScheduledSpaceFormSubmit}
+                className="space-y-4"
+              >
+                <ReferralCodeField
+                  value={referralInput}
+                  onChange={setReferralInput}
+                  locked={referralLocked}
+                  required={referralRequired}
                 />
-              </div>
-              {scheduledSpaceOn("whatsappNumber") && (
-                <div className="space-y-2">
-                  <Label>WhatsApp Number *</Label>
-                  <PhoneInput
-                    value={scheduledSpaceForm.whatsappNumber}
-                    onChange={(whatsappNumber: string, country: any) => {
-                      setScheduledSpaceWhatsappCountry(country);
+                <div>
+                  <Label>Full Name *</Label>
+                  <Input
+                    value={scheduledSpaceForm.name}
+                    onChange={(e) =>
                       setScheduledSpaceForm((p) => ({
                         ...p,
-                        whatsappNumber,
-                      }));
-                    }}
-                    enableSearch
-                    countryCodeEditable={false}
-                    preferredCountries={["in", "sg", "us", "gb"]}
-                    inputStyle={{
-                      width: "100%",
-                      height: "36px",
-                      borderRadius: "6px",
-                    }}
+                        name: e.target.value,
+                      }))
+                    }
+                    required
                   />
-                  {scheduledSpaceWhatsappCountry && (
-                    <p className="text-[11px] text-gray-400">
-                      Enter {phoneHint(scheduledSpaceWhatsappCountry)} for{" "}
-                      {scheduledSpaceWhatsappCountry.name}
-                    </p>
-                  )}
                 </div>
-              )}
-              {scheduledSpaceOn("phone") && (
-                <div className="space-y-2">
-                  <Label>Phone Number</Label>
-                  <PhoneInput
-                    value={scheduledSpaceForm.phone}
-                    onChange={(phone: string, country: any) => {
-                      setScheduledSpacePhoneCountry(country);
-                      setScheduledSpaceForm((p) => ({ ...p, phone }));
-                    }}
-                    enableSearch
-                    countryCodeEditable={false}
-                    preferredCountries={["in", "sg", "us", "gb"]}
-                    inputStyle={{
-                      width: "100%",
-                      height: "36px",
-                      borderRadius: "6px",
-                    }}
+                <div>
+                  <Label>Email (verified with Google)</Label>
+                  <Input
+                    type="email"
+                    value={scheduledSpaceForm.email}
+                    disabled
+                    className="bg-muted/50"
+                    title="Verified via Google sign-in — can't be changed"
                   />
-                  {scheduledSpacePhoneCountry && (
-                    <p className="text-[11px] text-gray-400">
-                      Enter {phoneHint(scheduledSpacePhoneCountry)} for{" "}
-                      {scheduledSpacePhoneCountry.name}
-                    </p>
-                  )}
                 </div>
-              )}
-              {scheduledSpaceOn("facilityType") &&
-                scheduledSpaceFacilityTypes.length > 0 && (
-                  <div>
-                    <Label>Type of Space Required *</Label>
-                    <Select
-                      value={scheduledSpaceForm.facilityType}
-                      onValueChange={(v) =>
+                {scheduledSpaceOn("whatsappNumber") && (
+                  <div className="space-y-2">
+                    <Label>WhatsApp Number *</Label>
+                    <PhoneInput
+                      value={scheduledSpaceForm.whatsappNumber}
+                      onChange={(whatsappNumber: string, country: any) => {
+                        setScheduledSpaceWhatsappCountry(country);
                         setScheduledSpaceForm((p) => ({
                           ...p,
-                          facilityType: v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a space type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {scheduledSpaceFacilityTypes.map((ft) => {
-                          const avail = scheduledSpaceFacilityAvailability[ft];
-                          const hint =
-                            avail && avail.total > 0
-                              ? avail.available > 0
-                                ? `${avail.available} slot${avail.available === 1 ? "" : "s"} available`
-                                : "Fully booked"
-                              : null;
-                          return (
-                            <SelectItem key={ft} value={ft}>
-                              <span className="flex items-center gap-2">
-                                <span>{ft}</span>
-                                {hint && (
-                                  <span
-                                    className={`text-xs ${avail.available > 0 ? "text-green-600" : "text-red-500"}`}
-                                  >
-                                    ({hint})
-                                  </span>
-                                )}
-                              </span>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
+                          whatsappNumber,
+                        }));
+                      }}
+                      enableSearch
+                      countryCodeEditable={false}
+                      preferredCountries={["in", "sg", "us", "gb"]}
+                      inputStyle={{
+                        width: "100%",
+                        height: "36px",
+                        borderRadius: "6px",
+                      }}
+                    />
+                    {scheduledSpaceWhatsappCountry && (
+                      <p className="text-[11px] text-gray-400">
+                        Enter {phoneHint(scheduledSpaceWhatsappCountry)} for{" "}
+                        {scheduledSpaceWhatsappCountry.name}
+                      </p>
+                    )}
                   </div>
                 )}
-              {scheduledSpaceOn("purpose") && (
-                <div>
-                  <Label>Purpose of Booking</Label>
-                  <Input
-                    value={scheduledSpaceForm.purpose}
-                    onChange={(e) =>
-                      setScheduledSpaceForm((p) => ({
-                        ...p,
-                        purpose: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              )}
-              {scheduledSpaceOn("organization") && (
-                <div>
-                  <Label>Organization / Department</Label>
-                  <Input
-                    value={scheduledSpaceForm.organization}
-                    onChange={(e) =>
-                      setScheduledSpaceForm((p) => ({
-                        ...p,
-                        organization: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              )}
-              {scheduledSpaceOn("companions") && (
-                <div>
-                  <Label>Persons Coming With You</Label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Optional. You + the names you add ={" "}
-                    {1 +
-                      scheduledSpaceForm.companions.filter((c) => c.trim())
-                        .length}{" "}
-                    person
-                    {scheduledSpaceForm.companions.filter((c) => c.trim())
-                      .length === 0
-                      ? ""
-                      : "s"}
-                    {(scheduledSpacesAvailable as any[]).some(
-                      (s: any) => s?.maxPersons,
-                    )
-                      ? ". Some slots are shared between bookings — you'll only be offered the ones with room for your group."
-                      : "."}
-                  </p>
-                  <div className="space-y-2 mt-1">
-                    {scheduledSpaceForm.companions.map((c, i) => (
-                      <div key={i} className="flex gap-2">
-                        <Input
-                          value={c}
-                          placeholder={`Person ${i + 1} name`}
-                          onChange={(e) =>
-                            setScheduledSpaceForm((p) => {
-                              const next = [...p.companions];
-                              next[i] = e.target.value;
-                              return { ...p, companions: next };
-                            })
-                          }
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            setScheduledSpaceForm((p) => ({
-                              ...p,
-                              companions: p.companions.filter(
-                                (_, idx) => idx !== i,
-                              ),
-                            }))
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
+                {scheduledSpaceOn("phone") && (
+                  <div className="space-y-2">
+                    <Label>Phone Number</Label>
+                    <PhoneInput
+                      value={scheduledSpaceForm.phone}
+                      onChange={(phone: string, country: any) => {
+                        setScheduledSpacePhoneCountry(country);
+                        setScheduledSpaceForm((p) => ({ ...p, phone }));
+                      }}
+                      enableSearch
+                      countryCodeEditable={false}
+                      preferredCountries={["in", "sg", "us", "gb"]}
+                      inputStyle={{
+                        width: "100%",
+                        height: "36px",
+                        borderRadius: "6px",
+                      }}
+                    />
+                    {scheduledSpacePhoneCountry && (
+                      <p className="text-[11px] text-gray-400">
+                        Enter {phoneHint(scheduledSpacePhoneCountry)} for{" "}
+                        {scheduledSpacePhoneCountry.name}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {scheduledSpaceOn("facilityType") &&
+                  scheduledSpaceFacilityTypes.length > 0 && (
+                    <div>
+                      <Label>Type of Space Required *</Label>
+                      <Select
+                        value={scheduledSpaceForm.facilityType}
+                        onValueChange={(v) =>
+                          setScheduledSpaceForm((p) => ({
+                            ...p,
+                            facilityType: v,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a space type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {scheduledSpaceFacilityTypes.map((ft) => {
+                            const avail =
+                              scheduledSpaceFacilityAvailability[ft];
+                            const hint =
+                              avail && avail.total > 0
+                                ? avail.available > 0
+                                  ? `${avail.available} slot${avail.available === 1 ? "" : "s"} available`
+                                  : "Fully booked"
+                                : null;
+                            return (
+                              <SelectItem key={ft} value={ft}>
+                                <span className="flex items-center gap-2">
+                                  <span>{ft}</span>
+                                  {hint && (
+                                    <span
+                                      className={`text-xs ${avail.available > 0 ? "text-green-600" : "text-red-500"}`}
+                                    >
+                                      ({hint})
+                                    </span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                {scheduledSpaceOn("purpose") && (
+                  <div>
+                    <Label>Purpose of Booking</Label>
+                    <Input
+                      value={scheduledSpaceForm.purpose}
+                      onChange={(e) =>
                         setScheduledSpaceForm((p) => ({
                           ...p,
-                          companions: [...p.companions, ""],
+                          purpose: e.target.value,
                         }))
                       }
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Add Person
-                    </Button>
+                    />
                   </div>
-                </div>
-              )}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={scheduledSpaceLoading}
-              >
-                {scheduledSpaceLoading ? "Submitting…" : "Submit Registration"}
-              </Button>
-            </form>
-          )}
+                )}
+                {scheduledSpaceOn("organization") && (
+                  <div>
+                    <Label>Organization / Department</Label>
+                    <Input
+                      value={scheduledSpaceForm.organization}
+                      onChange={(e) =>
+                        setScheduledSpaceForm((p) => ({
+                          ...p,
+                          organization: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                )}
+                {scheduledSpaceOn("companions") && (
+                  <div>
+                    <Label>Persons Coming With You</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Optional. You + the names you add ={" "}
+                      {1 +
+                        scheduledSpaceForm.companions.filter((c) => c.trim())
+                          .length}{" "}
+                      person
+                      {scheduledSpaceForm.companions.filter((c) => c.trim())
+                        .length === 0
+                        ? ""
+                        : "s"}
+                      {(scheduledSpacesAvailable as any[]).some(
+                        (s: any) => s?.maxPersons,
+                      )
+                        ? ". Some slots are shared between bookings — you'll only be offered the ones with room for your group."
+                        : "."}
+                    </p>
+                    <div className="space-y-2 mt-1">
+                      {scheduledSpaceForm.companions.map((c, i) => (
+                        <div key={i} className="flex gap-2">
+                          <Input
+                            value={c}
+                            placeholder={`Person ${i + 1} name`}
+                            onChange={(e) =>
+                              setScheduledSpaceForm((p) => {
+                                const next = [...p.companions];
+                                next[i] = e.target.value;
+                                return { ...p, companions: next };
+                              })
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              setScheduledSpaceForm((p) => ({
+                                ...p,
+                                companions: p.companions.filter(
+                                  (_, idx) => idx !== i,
+                                ),
+                              }))
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setScheduledSpaceForm((p) => ({
+                            ...p,
+                            companions: [...p.companions, ""],
+                          }))
+                        }
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Add Person
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={scheduledSpaceLoading}
+                >
+                  {scheduledSpaceLoading
+                    ? "Submitting…"
+                    : "Submit Registration"}
+                </Button>
+              </form>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -15263,10 +15320,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <div className="rounded-lg border p-3 space-y-1">
                   {(existingScheduledSpaceRequest?.selectedSlots || []).map(
                     (s: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex justify-between text-xs"
-                      >
+                      <div key={i} className="flex justify-between text-xs">
                         <span>
                           {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
                         </span>
@@ -15286,8 +15340,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       Booking Confirmed
                     </p>
                     <p className="text-xs text-emerald-700">
-                      Your check-in QR ticket is ready — show this at the
-                      venue.
+                      Your check-in QR ticket is ready — show this at the venue.
                     </p>
                   </div>
                 </div>
@@ -15316,10 +15369,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 <div className="rounded-lg border p-3 space-y-1">
                   {(existingScheduledSpaceRequest?.selectedSlots || []).map(
                     (s: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex justify-between text-xs"
-                      >
+                      <div key={i} className="flex justify-between text-xs">
                         <span>
                           {s.spaceName} — {s.date} {s.startTime}-{s.endTime}
                         </span>
@@ -15420,12 +15470,18 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   <Badge
                     className={`text-xs ${
                       {
-                        Completed: "bg-emerald-100 text-emerald-700 border border-emerald-300",
-                        Confirmed: "bg-blue-100 text-blue-700 border border-blue-300",
-                        Processing: "bg-amber-100 text-amber-700 border border-amber-300",
-                        Pending: "bg-amber-100 text-amber-700 border border-amber-300",
-                        Rejected: "bg-red-100 text-red-700 border border-red-300",
-                        Cancelled: "bg-red-100 text-red-700 border border-red-300",
+                        Completed:
+                          "bg-emerald-100 text-emerald-700 border border-emerald-300",
+                        Confirmed:
+                          "bg-blue-100 text-blue-700 border border-blue-300",
+                        Processing:
+                          "bg-amber-100 text-amber-700 border border-amber-300",
+                        Pending:
+                          "bg-amber-100 text-amber-700 border border-amber-300",
+                        Rejected:
+                          "bg-red-100 text-red-700 border border-red-300",
+                        Cancelled:
+                          "bg-red-100 text-red-700 border border-red-300",
                       }[req.status as string] ||
                       "bg-gray-100 text-gray-700 border border-gray-300"
                     }`}
@@ -15438,7 +15494,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   {req.createdAt
                     ? new Date(req.createdAt).toLocaleDateString()
                     : "—"}
-                  {req.slotsTotal > 0 ? ` · ${formatPrice(req.slotsTotal)}` : ""}
+                  {req.slotsTotal > 0
+                    ? ` · ${formatPrice(req.slotsTotal)}`
+                    : ""}
                 </p>
               </button>
             ))}
@@ -15484,79 +15542,79 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </p>
             )}
             {filteredScheduledSpaces.map((space: any) => (
-                <div key={space.positionId} className="rounded-lg border p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: space.color || "#3b82f6" }}
-                    />
-                    <div>
-                      <span className="font-semibold text-sm block">
-                        {space.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {space.facilityType}
-                      </span>
-                    </div>
-                    <span className="ml-auto text-sm font-semibold">
-                      {formatPrice(space.price || 0)}
+              <div key={space.positionId} className="rounded-lg border p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: space.color || "#3b82f6" }}
+                  />
+                  <div>
+                    <span className="font-semibold text-sm block">
+                      {space.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {space.facilityType}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(space.slots || []).map((slot: any) => {
-                      const isSelected = selectedScheduledSlots.some(
-                        (s) =>
-                          s.positionId === space.positionId &&
-                          s.slotId === slot.id,
-                      );
-                      // Shared slot (facility has a max persons per slot):
-                      // bookable while this party still fits in what's left.
-                      const shared = !!space.maxPersons;
-                      const tooBig =
-                        shared &&
-                        !slot.isBooked &&
-                        scheduledPartySize > slot.remainingPersons;
-                      const blocked = slot.isBooked || tooBig;
-                      return (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          disabled={blocked}
-                          onClick={() =>
-                            toggleScheduledSlotSelection(space, slot)
-                          }
-                          className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
-                            blocked
-                              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                              : isSelected
-                                ? "bg-blue-600 text-white border-blue-600"
-                                : "bg-white hover:border-blue-400"
-                          }`}
-                        >
-                          {slot.date} · {slot.startTime}-{slot.endTime}
-                          {slot.label ? ` (${slot.label})` : ""}
-                          {slot.isBooked
-                            ? shared
-                              ? " — Full"
-                              : " — Booked"
-                            : shared
-                              ? tooBig
-                                ? ` — only ${slot.remainingPersons} left (you need ${scheduledPartySize})`
-                                : slot.bookedPersons > 0
-                                  ? ` — ${slot.bookedPersons} already in, ${slot.remainingPersons} left`
-                                  : ` — ${slot.remainingPersons} seats`
-                              : ""}
-                        </button>
-                      );
-                    })}
-                    {(space.slots || []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        No slots defined for this space yet.
-                      </p>
-                    )}
-                  </div>
+                  <span className="ml-auto text-sm font-semibold">
+                    {formatPrice(space.price || 0)}
+                  </span>
                 </div>
-              ))}
+                <div className="flex flex-wrap gap-2">
+                  {(space.slots || []).map((slot: any) => {
+                    const isSelected = selectedScheduledSlots.some(
+                      (s) =>
+                        s.positionId === space.positionId &&
+                        s.slotId === slot.id,
+                    );
+                    // Shared slot (facility has a max persons per slot):
+                    // bookable while this party still fits in what's left.
+                    const shared = !!space.maxPersons;
+                    const tooBig =
+                      shared &&
+                      !slot.isBooked &&
+                      scheduledPartySize > slot.remainingPersons;
+                    const blocked = slot.isBooked || tooBig;
+                    return (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        disabled={blocked}
+                        onClick={() =>
+                          toggleScheduledSlotSelection(space, slot)
+                        }
+                        className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
+                          blocked
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : isSelected
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white hover:border-blue-400"
+                        }`}
+                      >
+                        {slot.date} · {slot.startTime}-{slot.endTime}
+                        {slot.label ? ` (${slot.label})` : ""}
+                        {slot.isBooked
+                          ? shared
+                            ? " — Full"
+                            : " — Booked"
+                          : shared
+                            ? tooBig
+                              ? ` — only ${slot.remainingPersons} left (you need ${scheduledPartySize})`
+                              : slot.bookedPersons > 0
+                                ? ` — ${slot.bookedPersons} already in, ${slot.remainingPersons} left`
+                                : ` — ${slot.remainingPersons} seats`
+                            : ""}
+                      </button>
+                    );
+                  })}
+                  {(space.slots || []).length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No slots defined for this space yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
           {selectedScheduledSlots.length > 0 && (
             <div className="border-t pt-3 mt-3 space-y-2">
@@ -17297,8 +17355,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     const stageW = vc?.mainStageWidth ?? 200;
                     const stageH = vc?.mainStageHeight ?? 60;
                     const stageX =
-                      vc?.mainStageX ??
-                      (venueDisplayCanvas.width - stageW) / 2;
+                      vc?.mainStageX ?? (venueDisplayCanvas.width - stageW) / 2;
                     const stageY = vc?.mainStageY ?? 0;
                     return (
                       <div
@@ -18650,7 +18707,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   </div>
                 </div>
 
-                {(stallOn("businessOwnerNationality") || stallOn("residency")) && (
+                {(stallOn("businessOwnerNationality") ||
+                  stallOn("residency")) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {stallOn("businessOwnerNationality") && (
                       <div className="space-y-2">
@@ -18869,7 +18927,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           value={shopkeeperDetails.phone}
                           onChange={(phone, country) => {
                             setPhoneCountry(country);
-                            setShopkeeperDetails((prev) => ({ ...prev, phone }));
+                            setShopkeeperDetails((prev) => ({
+                              ...prev,
+                              phone,
+                            }));
                           }}
                           countryCodeEditable={false}
                           disabled={isStallApproved}
@@ -18894,519 +18955,541 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 {(stallOn("businessCategory") ||
                   stallOn("noOfOperators") ||
                   stallOn("registrationNumber")) && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {stallOn("businessCategory") && (
-                    <div className="space-y-2">
-                      <Label>
-                        Business Category{" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                      {/* Shared dynamic picker — categories an exhibitor
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {stallOn("businessCategory") && (
+                      <div className="space-y-2">
+                        <Label>
+                          Business Category{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        {/* Shared dynamic picker — categories an exhibitor
                       types here persist to /categories and surface next
                       time in the organizer's Space Layout and Add
                       Exhibitor form. Single-select shape preserves the
                       old required-field semantics. */}
-                      <ExhibitorCategoryPicker
-                        value={shopkeeperDetails.businessCategory}
-                        onChange={(val) =>
-                          setShopkeeperDetails({
-                            ...shopkeeperDetails,
-                            businessCategory: val,
-                          })
-                        }
-                        baseline={BUSINESS_CATEGORIES}
-                        placeholder="Select"
-                      />
-                    </div>
-                  )}
-                  {stallOn("noOfOperators") && (
-                  <div className="space-y-2">
-                    <Label>
-                      No. of Operators <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={10}
-                      step={1}
-                      name="noOfOperators"
-                      value={shopkeeperDetails.noOfOperators}
-                      onChange={(e) => {
-                        // Clamp to 1–10 — blank/invalid or below snaps to 1,
-                        // anything above 10 caps at 10.
-                        const n = parseInt(e.target.value, 10);
-                        const clamped = !Number.isFinite(n)
-                          ? 1
-                          : Math.min(10, Math.max(1, n));
-                        setShopkeeperDetails((prev) => ({
-                          ...prev,
-                          noOfOperators: clamped,
-                        }));
-                      }}
-                      required
-                    />
-                  </div>
-                  )}
-                  {stallOn("registrationNumber") && (
-                  <div className="space-y-2 md:col-span-3">
-                    <Label>
-                      Registration Number ({regConfig.label}){" "}
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        name="registrationNumber"
-                        value={shopkeeperDetails.registrationNumber}
-                        onChange={(e) => {
-                          // Alphanumeric only, uppercased, and capped to the length
-                          // required by the residency (UEN 10 / GST 15).
-                          let v = e.target.value
-                            .replace(/[^a-zA-Z0-9]/g, "")
-                            .toUpperCase();
-                          if (regConfig.maxLength > 0)
-                            v = v.slice(0, regConfig.maxLength);
-                          setShopkeeperDetails((prev) => ({
-                            ...prev,
-                            registrationNumber: v,
-                          }));
-                          // Editing the number invalidates any prior verification.
-                          setGstVerified(false);
-                          setGstError("");
-                          setUenVerified(false);
-                          setUenError("");
-                        }}
-                        maxLength={regConfig.maxLength || undefined}
-                        placeholder={
-                          regConfig.label === "UEN"
-                            ? "e.g. 201812345A"
-                            : regConfig.label === "GST"
-                              ? "e.g. 27AAPFU0939F1ZV"
-                              : "e.g. UEN / GST No."
-                        }
-                        disabled={isStallApproved || gstVerified || uenVerified}
-                        required
-                        className="flex-1"
-                      />
-                      {/* India GST is verified against the government registry
+                        <ExhibitorCategoryPicker
+                          value={shopkeeperDetails.businessCategory}
+                          onChange={(val) =>
+                            setShopkeeperDetails({
+                              ...shopkeeperDetails,
+                              businessCategory: val,
+                            })
+                          }
+                          baseline={BUSINESS_CATEGORIES}
+                          placeholder="Select"
+                        />
+                      </div>
+                    )}
+                    {stallOn("noOfOperators") && (
+                      <div className="space-y-2">
+                        <Label>
+                          No. of Operators{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          name="noOfOperators"
+                          value={shopkeeperDetails.noOfOperators}
+                          onChange={(e) => {
+                            // Clamp to 1–10 — blank/invalid or below snaps to 1,
+                            // anything above 10 caps at 10.
+                            const n = parseInt(e.target.value, 10);
+                            const clamped = !Number.isFinite(n)
+                              ? 1
+                              : Math.min(10, Math.max(1, n));
+                            setShopkeeperDetails((prev) => ({
+                              ...prev,
+                              noOfOperators: clamped,
+                            }));
+                          }}
+                          required
+                        />
+                      </div>
+                    )}
+                    {stallOn("registrationNumber") && (
+                      <div className="space-y-2 md:col-span-3">
+                        <Label>
+                          Registration Number ({regConfig.label}){" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            name="registrationNumber"
+                            value={shopkeeperDetails.registrationNumber}
+                            onChange={(e) => {
+                              // Alphanumeric only, uppercased, and capped to the length
+                              // required by the residency (UEN 10 / GST 15).
+                              let v = e.target.value
+                                .replace(/[^a-zA-Z0-9]/g, "")
+                                .toUpperCase();
+                              if (regConfig.maxLength > 0)
+                                v = v.slice(0, regConfig.maxLength);
+                              setShopkeeperDetails((prev) => ({
+                                ...prev,
+                                registrationNumber: v,
+                              }));
+                              // Editing the number invalidates any prior verification.
+                              setGstVerified(false);
+                              setGstError("");
+                              setUenVerified(false);
+                              setUenError("");
+                            }}
+                            maxLength={regConfig.maxLength || undefined}
+                            placeholder={
+                              regConfig.label === "UEN"
+                                ? "e.g. 201812345A"
+                                : regConfig.label === "GST"
+                                  ? "e.g. 27AAPFU0939F1ZV"
+                                  : "e.g. UEN / GST No."
+                            }
+                            disabled={
+                              isStallApproved || gstVerified || uenVerified
+                            }
+                            required
+                            className="flex-1"
+                          />
+                          {/* India GST is verified against the government registry
                         (AppyFlow) as soon as it's filled in. */}
-                      {regConfig.label === "GST" &&
-                        !isStallApproved &&
-                        !isDummyReg && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() =>
-                              handleVerifyGST(
-                                shopkeeperDetails.registrationNumber,
-                              )
-                            }
-                            disabled={
-                              !shopkeeperDetails.registrationNumber ||
-                              gstVerifying ||
-                              gstVerified
-                            }
-                            className="whitespace-nowrap"
-                          >
-                            {gstVerifying
-                              ? "Verifying…"
-                              : gstVerified
-                                ? "Verified ✓"
-                                : "Verify"}
-                          </Button>
-                        )}
-                      {/* Singapore UEN is verified against ACRA's free open-data
+                          {regConfig.label === "GST" &&
+                            !isStallApproved &&
+                            !isDummyReg && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  handleVerifyGST(
+                                    shopkeeperDetails.registrationNumber,
+                                  )
+                                }
+                                disabled={
+                                  !shopkeeperDetails.registrationNumber ||
+                                  gstVerifying ||
+                                  gstVerified
+                                }
+                                className="whitespace-nowrap"
+                              >
+                                {gstVerifying
+                                  ? "Verifying…"
+                                  : gstVerified
+                                    ? "Verified ✓"
+                                    : "Verify"}
+                              </Button>
+                            )}
+                          {/* Singapore UEN is verified against ACRA's free open-data
                         registry (data.gov.sg) — no cost per check. */}
-                      {regConfig.label === "UEN" &&
-                        !isStallApproved &&
-                        !isDummyReg && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() =>
-                              handleVerifyUEN(
-                                shopkeeperDetails.registrationNumber,
-                              )
-                            }
-                            disabled={
-                              !shopkeeperDetails.registrationNumber ||
-                              uenVerifying ||
-                              uenVerified
-                            }
-                            className="whitespace-nowrap"
-                          >
-                            {uenVerifying
-                              ? "Verifying…"
-                              : uenVerified
-                                ? "Verified ✓"
-                                : "Verify"}
-                          </Button>
+                          {regConfig.label === "UEN" &&
+                            !isStallApproved &&
+                            !isDummyReg && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  handleVerifyUEN(
+                                    shopkeeperDetails.registrationNumber,
+                                  )
+                                }
+                                disabled={
+                                  !shopkeeperDetails.registrationNumber ||
+                                  uenVerifying ||
+                                  uenVerified
+                                }
+                                className="whitespace-nowrap"
+                              >
+                                {uenVerifying
+                                  ? "Verifying…"
+                                  : uenVerified
+                                    ? "Verified ✓"
+                                    : "Verify"}
+                              </Button>
+                            )}
+                        </div>
+                        {regConfig.label === "GST" && gstError && (
+                          <p className="text-[11px] text-red-600">{gstError}</p>
                         )}
-                    </div>
-                    {regConfig.label === "GST" && gstError && (
-                      <p className="text-[11px] text-red-600">{gstError}</p>
-                    )}
-                    {regConfig.label === "GST" && gstVerified && gstDetails && (
-                      <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                        <p className="mb-2 text-sm font-semibold text-green-700">
-                          ✓ GST Verified — details from the government registry
-                        </p>
-                        <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
-                          {(
-                            [
-                              ["GSTIN", gstDetails.gstin],
-                              ["Legal name", gstDetails.legalName],
-                              ["Trade name", gstDetails.tradeName],
-                              ["Status", gstDetails.status],
-                              ["Registered", gstDetails.registrationDate],
-                              ["Type", gstDetails.constitution],
-                              ["State", gstDetails.state],
-                              ["Address", gstDetails.address],
-                            ] as [string, string][]
-                          )
-                            .filter(([, v]) => !!v)
-                            .map(([label, value]) => (
-                              <div
-                                key={label}
-                                className={
-                                  label === "Address" ? "sm:col-span-2" : ""
-                                }
-                              >
-                                <span className="text-[11px] uppercase tracking-wide text-green-700/70">
-                                  {label}
-                                </span>
-                                <div className="font-medium text-green-900">
-                                  {value}
-                                </div>
+                        {regConfig.label === "GST" &&
+                          gstVerified &&
+                          gstDetails && (
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                              <p className="mb-2 text-sm font-semibold text-green-700">
+                                ✓ GST Verified — details from the government
+                                registry
+                              </p>
+                              <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                                {(
+                                  [
+                                    ["GSTIN", gstDetails.gstin],
+                                    ["Legal name", gstDetails.legalName],
+                                    ["Trade name", gstDetails.tradeName],
+                                    ["Status", gstDetails.status],
+                                    ["Registered", gstDetails.registrationDate],
+                                    ["Type", gstDetails.constitution],
+                                    ["State", gstDetails.state],
+                                    ["Address", gstDetails.address],
+                                  ] as [string, string][]
+                                )
+                                  .filter(([, v]) => !!v)
+                                  .map(([label, value]) => (
+                                    <div
+                                      key={label}
+                                      className={
+                                        label === "Address"
+                                          ? "sm:col-span-2"
+                                          : ""
+                                      }
+                                    >
+                                      <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                        {label}
+                                      </span>
+                                      <div className="font-medium text-green-900">
+                                        {value}
+                                      </div>
+                                    </div>
+                                  ))}
                               </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                    {regConfig.label === "UEN" && uenError && (
-                      <p className="text-[11px] text-red-600">{uenError}</p>
-                    )}
-                    {regConfig.label === "UEN" && uenVerified && uenDetails && (
-                      <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                        <p className="mb-2 text-sm font-semibold text-green-700">
-                          ✓ UEN Verified — details from ACRA registry
-                        </p>
-                        <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
-                          {(
-                            [
-                              ["UEN", uenDetails.uen],
-                              ["Entity name", uenDetails.entityName],
-                              ["Status", uenDetails.status],
-                              ["Entity type", uenDetails.entityType],
-                              ["Issued", uenDetails.issueDate],
-                              ["Agency", uenDetails.agency],
-                              ["Address", uenDetails.address],
-                            ] as [string, string][]
-                          )
-                            .filter(([, v]) => !!v)
-                            .map(([label, value]) => (
-                              <div
-                                key={label}
-                                className={
-                                  label === "Address" ? "sm:col-span-2" : ""
-                                }
-                              >
-                                <span className="text-[11px] uppercase tracking-wide text-green-700/70">
-                                  {label}
-                                </span>
-                                <div className="font-medium text-green-900">
-                                  {value}
-                                </div>
+                            </div>
+                          )}
+                        {regConfig.label === "UEN" && uenError && (
+                          <p className="text-[11px] text-red-600">{uenError}</p>
+                        )}
+                        {regConfig.label === "UEN" &&
+                          uenVerified &&
+                          uenDetails && (
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                              <p className="mb-2 text-sm font-semibold text-green-700">
+                                ✓ UEN Verified — details from ACRA registry
+                              </p>
+                              <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                                {(
+                                  [
+                                    ["UEN", uenDetails.uen],
+                                    ["Entity name", uenDetails.entityName],
+                                    ["Status", uenDetails.status],
+                                    ["Entity type", uenDetails.entityType],
+                                    ["Issued", uenDetails.issueDate],
+                                    ["Agency", uenDetails.agency],
+                                    ["Address", uenDetails.address],
+                                  ] as [string, string][]
+                                )
+                                  .filter(([, v]) => !!v)
+                                  .map(([label, value]) => (
+                                    <div
+                                      key={label}
+                                      className={
+                                        label === "Address"
+                                          ? "sm:col-span-2"
+                                          : ""
+                                      }
+                                    >
+                                      <span className="text-[11px] uppercase tracking-wide text-green-700/70">
+                                        {label}
+                                      </span>
+                                      <div className="font-medium text-green-900">
+                                        {value}
+                                      </div>
+                                    </div>
+                                  ))}
                               </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                    {regConfig.example && (
-                      <p className="text-[11px] text-muted-foreground">
-                        {regConfig.example}
-                      </p>
-                    )}
-                    {/* Vendors without a GST/UEN can drop in a placeholder so the
+                            </div>
+                          )}
+                        {regConfig.example && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {regConfig.example}
+                          </p>
+                        )}
+                        {/* Vendors without a GST/UEN can drop in a placeholder so the
                       required field is satisfied and they can still submit. It
                       won't verify (it isn't a real registration), so the
                       organizer knows to contact them and confirm before
                       approving. */}
-                    {!isStallApproved && !isDummyReg && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Don't have a{" "}
-                        {regConfig.label === "UEN/GST"
-                          ? "GST/UEN"
-                          : regConfig.label}
-                        ?{" "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShopkeeperDetails((prev) => ({
-                              ...prev,
-                              registrationNumber: dummyRegNumber,
-                            }));
-                            setGstVerified(false);
-                            setGstError("");
-                            setUenVerified(false);
-                            setUenError("");
-                          }}
-                          className="font-medium text-blue-600 underline hover:text-blue-700"
-                        >
-                          Use a placeholder &amp; submit
-                        </button>{" "}
-                        — the organizer will contact you to confirm.
-                      </p>
-                    )}
-                    {isDummyReg && !isStallApproved && (
-                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
-                        Placeholder entered — this isn't a real{" "}
-                        {regConfig.label}. The organizer will reach out to
-                        verify your details before approving.
-                      </p>
+                        {!isStallApproved && !isDummyReg && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Don't have a{" "}
+                            {regConfig.label === "UEN/GST"
+                              ? "GST/UEN"
+                              : regConfig.label}
+                            ?{" "}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShopkeeperDetails((prev) => ({
+                                  ...prev,
+                                  registrationNumber: dummyRegNumber,
+                                }));
+                                setGstVerified(false);
+                                setGstError("");
+                                setUenVerified(false);
+                                setUenError("");
+                              }}
+                              className="font-medium text-blue-600 underline hover:text-blue-700"
+                            >
+                              Use a placeholder &amp; submit
+                            </button>{" "}
+                            — the organizer will contact you to confirm.
+                          </p>
+                        )}
+                        {isDummyReg && !isStallApproved && (
+                          <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+                            Placeholder entered — this isn't a real{" "}
+                            {regConfig.label}. The organizer will reach out to
+                            verify your details before approving.
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
-                  )}
-                </div>
                 )}
 
                 {/* --- SECTION: SOCIAL & IMAGES --- */}
                 {(stallOn("faceBookLink") || stallOn("instagramLink")) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {stallOn("faceBookLink") && (
-                    <div className="space-y-2">
-                      <Label>
-                        Facebook Link <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        name="faceBookLink"
-                        value={shopkeeperDetails.faceBookLink}
-                        onChange={handleRentFormChange}
-                        placeholder="https://facebook.com/yourbrand"
-                      />
-                    </div>
-                  )}
-                  {stallOn("instagramLink") && (
-                    <div className="space-y-2">
-                      <Label>
-                        Instagram Link <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        name="instagramLink"
-                        value={shopkeeperDetails.instagramLink}
-                        onChange={handleRentFormChange}
-                        placeholder="@yourbrand"
-                      />
-                    </div>
-                  )}
-                </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {stallOn("faceBookLink") && (
+                      <div className="space-y-2">
+                        <Label>
+                          Facebook Link <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          name="faceBookLink"
+                          value={shopkeeperDetails.faceBookLink}
+                          onChange={handleRentFormChange}
+                          placeholder="https://facebook.com/yourbrand"
+                        />
+                      </div>
+                    )}
+                    {stallOn("instagramLink") && (
+                      <div className="space-y-2">
+                        <Label>
+                          Instagram Link <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          name="instagramLink"
+                          value={shopkeeperDetails.instagramLink}
+                          onChange={handleRentFormChange}
+                          placeholder="@yourbrand"
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Image Uploads */}
                 {(stallOn("registrationImage") ||
                   stallOn("companyLogo") ||
                   stallOn("productImage")) && (
-                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
-                  <h3 className="font-semibold text-gray-800">
-                    Brand Assets & Documents
-                  </h3>
+                  <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+                    <h3 className="font-semibold text-gray-800">
+                      Brand Assets & Documents
+                    </h3>
 
-                  {(stallOn("registrationImage") || stallOn("companyLogo")) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Reg Image */}
-                    {stallOn("registrationImage") && (
-                    <div className="space-y-2">
-                      <Label>
-                        Business Registration Document{" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                      <div className="flex items-center gap-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() =>
-                            document.getElementById("regUpload")?.click()
-                          }
-                        >
-                          <Upload className="w-4 h-4 mr-2" /> Upload
-                        </Button>
-                        <input
-                          id="regUpload"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleSingleImageSelect(e, "reg")}
-                        />
-                        {regImagePreview && (
-                          <img
-                            src={regImagePreview}
-                            className="h-12 w-12 object-cover rounded border border-gray-300"
-                            alt="Reg"
-                          />
+                    {(stallOn("registrationImage") ||
+                      stallOn("companyLogo")) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Reg Image */}
+                        {stallOn("registrationImage") && (
+                          <div className="space-y-2">
+                            <Label>
+                              Business Registration Document{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <div className="flex items-center gap-4">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  document.getElementById("regUpload")?.click()
+                                }
+                              >
+                                <Upload className="w-4 h-4 mr-2" /> Upload
+                              </Button>
+                              <input
+                                id="regUpload"
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) =>
+                                  handleSingleImageSelect(e, "reg")
+                                }
+                              />
+                              {regImagePreview && (
+                                <img
+                                  src={regImagePreview}
+                                  className="h-12 w-12 object-cover rounded border border-gray-300"
+                                  alt="Reg"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Logo */}
+                        {stallOn("companyLogo") && (
+                          <div className="space-y-2">
+                            <Label>
+                              Company Logo{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <div className="flex items-center gap-4">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  document.getElementById("logoUpload")?.click()
+                                }
+                              >
+                                <Upload className="w-4 h-4 mr-2" /> Upload
+                              </Button>
+                              <input
+                                id="logoUpload"
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) =>
+                                  handleSingleImageSelect(e, "logo")
+                                }
+                              />
+                              {logoPreview && (
+                                <img
+                                  src={logoPreview}
+                                  className="h-12 w-12 object-cover rounded border border-gray-300"
+                                  alt="Logo"
+                                />
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
                     )}
 
-                    {/* Logo */}
-                    {stallOn("companyLogo") && (
-                    <div className="space-y-2">
-                      <Label>
-                        Company Logo <span className="text-red-500">*</span>
-                      </Label>
-                      <div className="flex items-center gap-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() =>
-                            document.getElementById("logoUpload")?.click()
-                          }
-                        >
-                          <Upload className="w-4 h-4 mr-2" /> Upload
-                        </Button>
-                        <input
-                          id="logoUpload"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleSingleImageSelect(e, "logo")}
-                        />
-                        {logoPreview && (
-                          <img
-                            src={logoPreview}
-                            className="h-12 w-12 object-cover rounded border border-gray-300"
-                            alt="Logo"
-                          />
-                        )}
-                      </div>
-                    </div>
-                    )}
-                  </div>
-                  )}
-
-                  {/* Product Images */}
-                  {stallOn("productImage") && (
-                  <div className="space-y-2 pt-4 border-t border-gray-200">
-                    <Label>
-                      Product Images (
-                      {productFiles.length + existingProductImages.length}/5){" "}
-                      <span className="text-red-500">*</span>
-                      <span className="ml-1 text-[11px] font-normal text-gray-400">
-                        (at least 1 required)
-                      </span>
-                    </Label>
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          productFiles.length + existingProductImages.length >=
-                          5
-                        }
-                        onClick={() =>
-                          document.getElementById("productUpload")?.click()
-                        }
-                      >
-                        <Upload className="w-4 h-4 mr-2" /> Add Products
-                      </Button>
-                      <input
-                        id="productUpload"
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleMultipleImageSelect}
-                      />
-
-                      {/* Stored images from a returning vendor's profile */}
-                      {existingProductImages.map((preview, idx) => (
-                        <div key={`existing-${idx}`} className="relative group">
-                          <img
-                            src={preview}
-                            className="h-14 w-14 object-cover rounded border border-gray-300"
-                            alt={`Saved product ${idx}`}
-                          />
-                          <button
+                    {/* Product Images */}
+                    {stallOn("productImage") && (
+                      <div className="space-y-2 pt-4 border-t border-gray-200">
+                        <Label>
+                          Product Images (
+                          {productFiles.length + existingProductImages.length}
+                          /5) <span className="text-red-500">*</span>
+                          <span className="ml-1 text-[11px] font-normal text-gray-400">
+                            (at least 1 required)
+                          </span>
+                        </Label>
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <Button
                             type="button"
-                            onClick={() =>
-                              setExistingProductImages((prev) =>
-                                prev.filter((_, i) => i !== idx),
-                              )
+                            variant="outline"
+                            disabled={
+                              productFiles.length +
+                                existingProductImages.length >=
+                              5
                             }
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() =>
+                              document.getElementById("productUpload")?.click()
+                            }
                           >
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-
-                      {productPreviews.map((preview, idx) => (
-                        <div key={idx} className="relative group">
-                          <img
-                            src={preview}
-                            className="h-14 w-14 object-cover rounded border border-gray-300"
-                            alt={`Product ${idx}`}
+                            <Upload className="w-4 h-4 mr-2" /> Add Products
+                          </Button>
+                          <input
+                            id="productUpload"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={handleMultipleImageSelect}
                           />
-                          <button
-                            type="button"
-                            onClick={() => removeProductImage(idx)}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
+
+                          {/* Stored images from a returning vendor's profile */}
+                          {existingProductImages.map((preview, idx) => (
+                            <div
+                              key={`existing-${idx}`}
+                              className="relative group"
+                            >
+                              <img
+                                src={preview}
+                                className="h-14 w-14 object-cover rounded border border-gray-300"
+                                alt={`Saved product ${idx}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExistingProductImages((prev) =>
+                                    prev.filter((_, i) => i !== idx),
+                                  )
+                                }
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+
+                          {productPreviews.map((preview, idx) => (
+                            <div key={idx} className="relative group">
+                              <img
+                                src={preview}
+                                className="h-14 w-14 object-cover rounded border border-gray-300"
+                                alt={`Product ${idx}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeProductImage(idx)}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                  )}
-                </div>
                 )}
 
                 {/* Description */}
                 {stallOn("description") && (
-                <div className="space-y-2">
-                  <Label>
-                    Business, Products & Brand Description{" "}
-                    <span className="text-red-500">*</span>
-                  </Label>
-                  <Textarea
-                    name="description"
-                    value={shopkeeperDetails.description}
-                    onChange={handleRentFormChange}
-                    placeholder="Tell us about what you sell..."
-                    rows={3}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Business, Products & Brand Description{" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      name="description"
+                      value={shopkeeperDetails.description}
+                      onChange={handleRentFormChange}
+                      placeholder="Tell us about what you sell..."
+                      rows={3}
+                    />
+                  </div>
                 )}
 
                 {stallOn("refundPaymentDescription") && (
-                <div className="space-y-2">
-                  <Label>
-                    Refund Payment Description{" "}
-                    <span className="text-red-500">*</span>
-                  </Label>
-                  <Textarea
-                    name="refundPaymentDescription"
-                    value={shopkeeperDetails.refundPaymentDescription}
-                    onChange={handleRentFormChange}
-                    placeholder="Tell us about what you sell..."
-                    rows={3}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Refund Payment Description{" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      name="refundPaymentDescription"
+                      value={shopkeeperDetails.refundPaymentDescription}
+                      onChange={handleRentFormChange}
+                      placeholder="Tell us about what you sell..."
+                      rows={3}
+                    />
+                  </div>
                 )}
 
                 {stallOn("address") && (
-                <div className="space-y-2">
-                  <Label>
-                    Full Address <span className="text-red-500">*</span>
-                  </Label>
-                  <Textarea
-                    name="address"
-                    value={shopkeeperDetails.address}
-                    onChange={handleRentFormChange}
-                    placeholder="Your business address"
-                    rows={2}
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label>
+                      Full Address <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      name="address"
+                      value={shopkeeperDetails.address}
+                      onChange={handleRentFormChange}
+                      placeholder="Your business address"
+                      rows={2}
+                    />
+                  </div>
                 )}
 
                 {/* Preferred Space Types — with quantity, total capped at the
