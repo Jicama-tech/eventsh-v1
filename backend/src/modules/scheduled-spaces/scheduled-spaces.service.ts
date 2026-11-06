@@ -58,6 +58,8 @@ const TERMINAL_STATUSES = [
   ScheduledSpaceStatusEnum.Cancelled,
   ScheduledSpaceStatusEnum.Rejected,
 ];
+
+import { buildCustomAnswers } from "../events/custom-form-fields.util";
 
 @Injectable()
 export class ScheduledSpacesService {
@@ -120,6 +122,10 @@ export class ScheduledSpacesService {
     // written unless the code resolved to an agent or operator.
     assertReferralIfRequired(event, referral, dto.referralCode);
 
+    const customAnswers = buildCustomAnswers(
+      (event.registrationFormFields as any)?.customFields?.scheduledSpace,
+      dto.customAnswers,
+    );
     const companions = (dto.companions || [])
       .map((c) => (c || "").trim())
       .filter(Boolean);
@@ -133,6 +139,7 @@ export class ScheduledSpacesService {
       facilityTypeRequested: dto.facilityTypeRequested,
       purpose: dto.purpose,
       organization: dto.organization,
+      customAnswers,
       ...(referral || {}),
       companions: companions,
       partySize: 1 + companions.length,

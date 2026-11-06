@@ -27,9 +27,30 @@ export interface RegistrationFormFieldDef {
   alwaysOn: boolean;
 }
 
+/** An extra question the organizer adds to a public application form. */
+export interface CustomFormField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  required: boolean;
+  /** Choices, for type "select". */
+  options?: string[];
+}
+
 export type RegistrationFormFieldsConfig = Partial<
   Record<RegistrationFormCategory, Record<string, boolean>>
->;
+> & {
+  /** Organizer-defined extra questions, per form. */
+  customFields?: Partial<Record<RegistrationFormCategory, CustomFormField[]>>;
+};
+
+/** The organizer-defined extra questions for one form (empty when none). */
+export function getCustomFields(
+  config: RegistrationFormFieldsConfig | null | undefined,
+  category: RegistrationFormCategory,
+): CustomFormField[] {
+  return config?.customFields?.[category] ?? [];
+}
 
 export const REGISTRATION_FORM_FIELDS: Record<
   RegistrationFormCategory,

@@ -43,7 +43,7 @@ export const getCroppedImg = (imageSrc: string, crop: any): Promise<Blob> => {
           resolve(blob);
         },
         mimeType,
-        0.9, // quality (only applies to jpeg/webp)
+        0.97, // quality (only applies to jpeg/webp) — crops feed the banner, keep it sharp
       );
     };
 

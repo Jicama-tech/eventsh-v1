@@ -1568,6 +1568,7 @@ export class EventsController {
       roundTable?: Record<string, boolean>;
       workshop?: Record<string, boolean>;
       scheduledSpace?: Record<string, boolean>;
+      customFields?: Record<string, any[]>;
     },
   ) {
     try {

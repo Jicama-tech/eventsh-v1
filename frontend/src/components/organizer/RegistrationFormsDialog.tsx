@@ -11,13 +11,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, ClipboardList, CheckCircle2 } from "lucide-react";
+import { Loader2, ClipboardList, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   REGISTRATION_FORM_FIELDS,
   CATEGORY_LABELS,
   CATEGORY_FEATURE_FLAG,
   isFieldEnabled,
+  getCustomFields,
+  type CustomFormField,
   type RegistrationFormCategory,
   type RegistrationFormFieldsConfig,
 } from "@/lib/registrationFormFields";
@@ -79,8 +89,66 @@ export function RegistrationFormsDialog({
     }));
   };
 
+  // Organizer-defined extra questions (Scheduled Space only for now).
+  const CUSTOM_FIELD_CATEGORIES: RegistrationFormCategory[] = ["scheduledSpace"];
+
+  const setCustomFields = (
+    category: RegistrationFormCategory,
+    next: CustomFormField[],
+  ) => {
+    setConfig((prev) => ({
+      ...prev,
+      customFields: { ...(prev.customFields || {}), [category]: next },
+    }));
+  };
+
+  const addCustomField = (category: RegistrationFormCategory) => {
+    setCustomFields(category, [
+      ...getCustomFields(config, category),
+      {
+        id: `cf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+        label: "",
+        type: "text",
+        required: false,
+      },
+    ]);
+  };
+
+  const updateCustomField = (
+    category: RegistrationFormCategory,
+    id: string,
+    patch: Partial<CustomFormField>,
+  ) => {
+    setCustomFields(
+      category,
+      getCustomFields(config, category).map((f) =>
+        f.id === id ? { ...f, ...patch } : f,
+      ),
+    );
+  };
+
   const save = async () => {
     if (!event) return;
+    // A custom question needs a label (and a dropdown needs choices);
+    // half-filled rows are dropped rather than saved.
+    const cleaned: RegistrationFormFieldsConfig = {
+      ...config,
+      customFields: Object.fromEntries(
+        Object.entries(config.customFields || {}).map(([cat, list]) => [
+          cat,
+          (list || [])
+            .map((f) => ({
+              ...f,
+              label: f.label.trim(),
+              options:
+                f.type === "select"
+                  ? (f.options || []).map((o) => o.trim()).filter(Boolean)
+                  : undefined,
+            }))
+            .filter((f) => f.label && (f.type !== "select" || f.options?.length)),
+        ]),
+      ),
+    };
     setSaving(true);
     try {
       const token = sessionStorage.getItem("token");
@@ -92,13 +160,13 @@ export function RegistrationFormsDialog({
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ registrationFormFields: config }),
+          body: JSON.stringify({ registrationFormFields: cleaned }),
         },
       );
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.message || "Failed to save");
       toast({ title: "Registration forms updated" });
-      onSaved({ ...event, registrationFormFields: config });
+      onSaved({ ...event, registrationFormFields: cleaned });
     } catch (err: any) {
       toast({
         title: "Couldn't save",
@@ -190,6 +258,103 @@ export function RegistrationFormsDialog({
                       </div>
                     ))}
                   </div>
+                  {CUSTOM_FIELD_CATEGORIES.includes(c) && (
+                    <div className="space-y-2 pt-2">
+                      <div>
+                        <p className="text-sm font-medium">Your own questions</p>
+                        <p className="text-xs text-muted-foreground">
+                          Add extra fields to this form. Answers show up with
+                          each request.
+                        </p>
+                      </div>
+                      {getCustomFields(config, c).map((f) => (
+                        <div
+                          key={f.id}
+                          className="rounded-lg border border-border p-3 space-y-2"
+                        >
+                          <div className="flex gap-2">
+                            <Input
+                              value={f.label}
+                              placeholder="Question, e.g. Number of players"
+                              maxLength={120}
+                              onChange={(e) =>
+                                updateCustomField(c, f.id, { label: e.target.value })
+                              }
+                            />
+                            <Select
+                              value={f.type}
+                              onValueChange={(v) =>
+                                updateCustomField(c, f.id, {
+                                  type: v as CustomFormField["type"],
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-40">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Short text</SelectItem>
+                                <SelectItem value="textarea">Long text</SelectItem>
+                                <SelectItem value="select">Dropdown</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Remove question"
+                              onClick={() =>
+                                setCustomFields(
+                                  c,
+                                  getCustomFields(config, c).filter(
+                                    (x) => x.id !== f.id,
+                                  ),
+                                )
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {f.type === "select" && (
+                            <Input
+                              value={(f.options || []).join(", ")}
+                              placeholder="Choices, separated by commas"
+                              onChange={(e) =>
+                                updateCustomField(c, f.id, {
+                                  options: e.target.value.split(","),
+                                })
+                              }
+                            />
+                          )}
+                          <div className="flex items-center justify-between">
+                            <Label
+                              htmlFor={`req-${f.id}`}
+                              className="text-xs font-normal cursor-pointer"
+                            >
+                              Required
+                            </Label>
+                            <Switch
+                              id={`req-${f.id}`}
+                              checked={f.required}
+                              onCheckedChange={(v) =>
+                                updateCustomField(c, f.id, { required: v })
+                              }
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addCustomField(c)}
+                        disabled={getCustomFields(config, c).length >= 20}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add question
+                      </Button>
+                    </div>
+                  )}
                 </TabsContent>
               );
             })}

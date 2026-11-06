@@ -919,6 +919,7 @@ export class CreateEventDto {
     roundTable?: Record<string, boolean>;
     workshop?: Record<string, boolean>;
     scheduledSpace?: Record<string, boolean>;
+    customFields?: Record<string, any[]>;
   };
 
   @IsString()
