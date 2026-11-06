@@ -89,8 +89,9 @@ export function RegistrationFormsDialog({
     }));
   };
 
-  // Organizer-defined extra questions (Scheduled Space only for now).
-  const CUSTOM_FIELD_CATEGORIES: RegistrationFormCategory[] = ["scheduledSpace"];
+  // Organizer-defined extra questions are built but hidden for now — add
+  // "scheduledSpace" here to show the "Your own questions" editor again.
+  const CUSTOM_FIELD_CATEGORIES: RegistrationFormCategory[] = [];
 
   const setCustomFields = (
     category: RegistrationFormCategory,
