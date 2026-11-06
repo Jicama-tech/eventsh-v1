@@ -402,6 +402,13 @@ export class ScheduledSpacesService {
       });
     }
 
+    // "Multiple slots booking" off: one slot in total, across all templates.
+    if (event.scheduledSpaceMultipleSlots === false && resolved.length > 1) {
+      throw new BadRequestException(
+        "This event allows booking only one slot per person.",
+      );
+    }
+
     const tokens = resolved.map((r) => `${r.positionId}:${r.slotId}`);
 
     // Atomic reservation, one update for every slot. Exclusive slots succeed

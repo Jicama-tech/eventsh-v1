@@ -1094,6 +1094,11 @@ export class CreateEventDto {
   @IsOptional()
   scheduledSpaceBookedSlots?: string[];
 
+  // false = visitors may book just one slot across all templates.
+  @IsBoolean()
+  @IsOptional()
+  scheduledSpaceMultipleSlots?: boolean;
+
   // Placed entrance / exit doors. Kept as a loose array — the door
   // shape is small and stable enough that we can skip a typed
   // sub-DTO and still get the strict validation pipe to accept it.

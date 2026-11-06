@@ -3440,11 +3440,16 @@ const TableManagement = ({
 const ScheduledSpaceManagement = ({
   templates,
   setTemplates,
+  multipleSlots,
+  setMultipleSlots,
   current,
   setCurrent,
 }: {
   templates: ScheduledSpaceTemplate[];
   setTemplates: (templates: ScheduledSpaceTemplate[]) => void;
+  /** false = a visitor books one slot in total, across all templates. */
+  multipleSlots: boolean;
+  setMultipleSlots: (v: boolean) => void;
   current: {
     facilityType: string;
     customFacilityType: string;
@@ -3762,6 +3767,23 @@ const ScheduledSpaceManagement = ({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+          <div>
+            <Label htmlFor="scheduled-multi-slots" className="font-medium">
+              Multiple slots booking allowed
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {multipleSlots
+                ? "A person can book as many slots as they like."
+                : "A person can book only one slot, across all the spaces below."}
+            </p>
+          </div>
+          <Switch
+            id="scheduled-multi-slots"
+            checked={multipleSlots}
+            onCheckedChange={setMultipleSlots}
+          />
+        </div>
         <div className="border rounded-lg p-4 bg-muted space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -9525,6 +9547,9 @@ export function CreateEventForm({
   const [scheduledSpaceTemplates, setScheduledSpaceTemplates] = useState<
     ScheduledSpaceTemplate[]
   >(initialData?.scheduledSpaceTemplates || []);
+  // false = visitors may book only one slot in total (default: any number).
+  const [scheduledSpaceMultipleSlots, setScheduledSpaceMultipleSlots] =
+    useState<boolean>(initialData?.scheduledSpaceMultipleSlots !== false);
 
   // Venue Configurations (multiple)
   const [venueConfigurations, setVenueConfigurations] = useState<VenueConfig[]>(
@@ -12137,6 +12162,10 @@ export function CreateEventForm({
       data.append(
         "scheduledSpaceTemplates",
         JSON.stringify(scheduledSpaceTemplates),
+      );
+      data.append(
+        "scheduledSpaceMultipleSlots",
+        String(scheduledSpaceMultipleSlots),
       );
       const allScheduledSpaces = Object.entries(venueScheduledSpaces).flatMap(
         ([configId, spaces]) =>
@@ -16824,6 +16853,8 @@ export function CreateEventForm({
               <BlurOverlay visible={!blurActive}>
                 <ScheduledSpaceManagement
                   templates={scheduledSpaceTemplates}
+                  multipleSlots={scheduledSpaceMultipleSlots}
+                  setMultipleSlots={setScheduledSpaceMultipleSlots}
                   setTemplates={(next) => {
                     setScheduledSpaceTemplates(next);
                     // Placed instances snapshot the template at placement

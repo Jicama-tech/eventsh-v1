@@ -585,6 +585,9 @@ export class EventsController {
         body.scheduledSpaceTemplates = JSON.parse(body.scheduledSpaceTemplates);
       if (typeof body.venueScheduledSpaces === "string")
         body.venueScheduledSpaces = JSON.parse(body.venueScheduledSpaces);
+      if (body.scheduledSpaceMultipleSlots !== undefined)
+        body.scheduledSpaceMultipleSlots =
+          String(body.scheduledSpaceMultipleSlots) !== "false";
       if (typeof body.venueAnnotations === "string")
         body.venueAnnotations = JSON.parse(body.venueAnnotations);
       // Placed entrance / exit doors — same multipart-JSON unwrap as
@@ -1290,6 +1293,9 @@ export class EventsController {
         body.scheduledSpaceTemplates = JSON.parse(body.scheduledSpaceTemplates);
       if (typeof body.venueScheduledSpaces === "string")
         body.venueScheduledSpaces = JSON.parse(body.venueScheduledSpaces);
+      if (body.scheduledSpaceMultipleSlots !== undefined)
+        body.scheduledSpaceMultipleSlots =
+          String(body.scheduledSpaceMultipleSlots) !== "false";
       if (typeof body.venueAnnotations === "string")
         body.venueAnnotations = JSON.parse(body.venueAnnotations);
       // Placed entrance / exit doors — same unwrap as the create path.
