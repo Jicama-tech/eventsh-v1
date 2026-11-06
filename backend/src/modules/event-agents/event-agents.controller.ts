@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -36,6 +37,17 @@ export class EventAgentsController {
   @Get()
   list(@Req() req: any, @Param("eventId") eventId: string) {
     return this.agents.list(eventId, req.user);
+  }
+
+  /** Is this referral code free? (`agentId` = the agent being edited.) */
+  @Get("code-available")
+  codeAvailable(
+    @Req() req: any,
+    @Param("eventId") eventId: string,
+    @Query("code") code: string,
+    @Query("agentId") agentId?: string,
+  ) {
+    return this.agents.checkCode(eventId, code, agentId, req.user);
   }
 
   @Post()

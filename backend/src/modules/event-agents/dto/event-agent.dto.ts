@@ -20,6 +20,11 @@ import {
 const trim = ({ value }: { value: unknown }) =>
   typeof value === "string" ? value.trim() : value;
 
+/** What an organizer-chosen referral code may look like. */
+export const REFERRAL_CODE_PATTERN = /^[A-Z0-9_-]{3,20}$/;
+export const REFERRAL_CODE_MESSAGE =
+  "Use 3-20 letters, digits, - or _ for the referral code (no spaces).";
+
 /** Most extra contacts one agent may list. */
 export const MAX_EXTRA_CONTACTS = 20;
 
@@ -39,13 +44,27 @@ export class AgentContactDto {
   phone: string;
 }
 
-/** A new agent for an event. The referral code is generated, never posted. */
+/** A new agent for an event. The referral code is generated unless one is chosen. */
 export class CreateEventAgentDto {
   @Transform(trim)
   @IsString()
   @MinLength(1, { message: "Enter the agent's name." })
   @MaxLength(80)
   name: string;
+
+  /**
+   * A referral code of the organizer's choosing (3-20 letters, digits, "-" or
+   * "_"; stored uppercase). Omit to have one generated. Must be unique across
+   * every agent and operator.
+   */
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toUpperCase() : value,
+  )
+  @IsOptional()
+  @ValidateIf((o) => !!o.referralCode)
+  @IsString()
+  @Matches(REFERRAL_CODE_PATTERN, { message: REFERRAL_CODE_MESSAGE })
+  referralCode?: string;
 
   // Stored as typed (with the country code); the same digits rule as every
   // other WhatsApp field. Optional so an agent can be email-only.
@@ -88,6 +107,20 @@ export class UpdateEventAgentDto {
   @MinLength(1)
   @MaxLength(80)
   name?: string;
+
+  /**
+   * A referral code of the organizer's choosing (3-20 letters, digits, "-" or
+   * "_"; stored uppercase). Omit to have one generated. Must be unique across
+   * every agent and operator.
+   */
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toUpperCase() : value,
+  )
+  @IsOptional()
+  @ValidateIf((o) => !!o.referralCode)
+  @IsString()
+  @Matches(REFERRAL_CODE_PATTERN, { message: REFERRAL_CODE_MESSAGE })
+  referralCode?: string;
 
   @Transform(trim)
   @IsOptional()
