@@ -1000,6 +1000,11 @@ export class Event {
   @Prop({ type: Array, default: [] })
   venueScheduledSpaces: PositionedScheduledSpace[];
 
+  // When false, a visitor books only ONE slot in total, across every
+  // template. Missing/true = any number of slots (the original behaviour).
+  @Prop({ type: Boolean, default: true })
+  scheduledSpaceMultipleSlots?: boolean;
+
   // Atomic per-(instance,slot) reservation ledger — same proven technique as
   // seatMapBookedSeats above. Tokens: `${positionId}:${slotId}`.
   @Prop({ type: [String], default: [] })

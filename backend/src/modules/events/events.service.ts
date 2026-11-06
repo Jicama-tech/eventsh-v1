@@ -728,6 +728,8 @@ export class EventsService {
         scheduledSpaceTemplates: createEventDto.scheduledSpaceTemplates || [],
         venueScheduledSpaces: createEventDto.venueScheduledSpaces || [],
         scheduledSpaceBookedSlots: createEventDto.scheduledSpaceBookedSlots || [],
+        scheduledSpaceMultipleSlots:
+          createEventDto.scheduledSpaceMultipleSlots !== false,
         venueAnnotations: createEventDto.venueAnnotations || [],
         volunteers: (createEventDto.volunteers || []).map((v) => ({
           name: v.name,

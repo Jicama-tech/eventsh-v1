@@ -2564,8 +2564,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       if (exists) {
         return prev.filter((s) => `${s.positionId}:${s.slotId}` !== key);
       }
+      // Organizer turned "multiple slots" off: picking another slot swaps the
+      // choice instead of adding to it.
+      const single = (eventData as any)?.scheduledSpaceMultipleSlots === false;
       return [
-        ...prev,
+        ...(single ? [] : prev),
         {
           positionId: space.positionId,
           templateId: space.templateId,
@@ -15737,6 +15740,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
               </div>
             ))}
           </div>
+          {(eventData as any)?.scheduledSpaceMultipleSlots === false && (
+            <p className="text-xs text-muted-foreground mt-2">
+              You can book one slot only — picking another replaces your choice.
+            </p>
+          )}
           {selectedScheduledSlots.length > 0 && (
             <div className="border-t pt-3 mt-3 space-y-2">
               <p className="text-sm font-semibold">
