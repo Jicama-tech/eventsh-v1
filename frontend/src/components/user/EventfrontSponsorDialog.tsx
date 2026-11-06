@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PhoneField } from "@/components/ui/PhoneField";
 import { toast } from "@/hooks/use-toast";
 import { buildPayNowQrUrl } from "@/lib/paynowQr";
-import { splitE164 } from "@/lib/phone";
+import { organizerPhoneCountry, splitE164 } from "@/lib/phone";
 import {
   Loader2,
   Handshake,
@@ -607,7 +607,12 @@ export default function EventfrontSponsorDialog({
               <div>
                 <Label className="text-xs">Contact number</Label>
                 {/* Sponsors can be anywhere — full country list. */}
-                <PhoneField format="e164" value={phone} onChange={setPhone} />
+                <PhoneField
+                  format="e164"
+                  value={phone}
+                  onChange={setPhone}
+                  defaultCountry={organizerPhoneCountry(organizer?.country)}
+                />
               </div>
               <div>
                 <Label className="text-xs">Website</Label>

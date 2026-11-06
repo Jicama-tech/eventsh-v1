@@ -198,7 +198,8 @@ interface ProcessedExhibitor {
 }
 
 import { PhoneField } from "@/components/ui/PhoneField";
-import { isLikelyPhone, splitE164 } from "@/lib/phone";
+import { useCountry } from "@/hooks/useCountry";
+import { isLikelyPhone, organizerCountryName, splitE164 } from "@/lib/phone";
 import SuppliersDirectory from "@/components/organizer/SuppliersDirectory";
 import SponsorsDirectory from "@/components/organizer/SponsorsDirectory";
 import { t } from "@/i18n/t";
@@ -3099,6 +3100,12 @@ export function AddExhibitorDialog({
   mode?: "add" | "edit";
 }) {
   const { toast } = useToast();
+  const { country: organizerCountry } = useCountry();
+  // New exhibitors start in the organizer's country (editable).
+  const defaultCountryName =
+    SUPPORTED_COUNTRIES.find(
+      (c) => c.name === organizerCountryName(organizerCountry),
+    )?.name ?? "India";
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -3107,7 +3114,7 @@ export function AddExhibitorDialog({
     lastName: "",
     email: "",
     shopName: "",
-    country: "India",
+    country: defaultCountryName,
     whatsappNumber: "",
     phone: "",
     address: "",
@@ -3277,7 +3284,7 @@ export function AddExhibitorDialog({
       firstName: "",
       lastName: "",
       email: "",
-      country: "India",
+      country: defaultCountryName,
         whatsappNumber: "",
       phone: "",
       address: "",

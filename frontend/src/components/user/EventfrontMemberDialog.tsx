@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import PhoneField from "@/components/ui/PhoneField";
+import { organizerPhoneCountry } from "@/lib/phone";
 import { ExhibitorCategoryPicker } from "@/components/ui/ExhibitorCategoryPicker";
 import {
   Award,
@@ -132,6 +133,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
   const [transactionId, setTransactionId] = useState("");
   const [paymentQR, setPaymentQR] = useState<string | null>(null);
   const [payeeLabel, setPayeeLabel] = useState<string | null>(null);
+  const [orgCountry, setOrgCountry] = useState<string | null>(null);
 
   const reset = () => {
     setStep("google");
@@ -368,6 +370,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
           company: string | null;
         };
         if (cancelled) return;
+        setOrgCountry(info.country);
         const dynamic = buildPayNowQrUrl({
           organizer: {
             UENNumber: info.UENNumber,
@@ -721,6 +724,7 @@ export function EventfrontMemberDialog({ open, onClose, organizerId }: Props) {
                 format="e164"
                 value={whatsapp}
                 onChange={setWhatsapp}
+                defaultCountry={organizerPhoneCountry(orgCountry)}
                 placeholder="+91 98765 43210"
               />
             </div>

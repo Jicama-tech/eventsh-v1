@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PhoneField } from "@/components/ui/PhoneField";
-import { splitE164 } from "@/lib/phone";
+import { splitE164, organizerPhoneCountry } from "@/lib/phone";
 import {
   Dialog,
   DialogContent,
@@ -72,7 +72,12 @@ interface FormData {
   requirements: Requirement[];
   instructions: string;
   currency: string;
-  event: { id: string; title: string; startDate?: string; location?: string } | null;
+  event: {
+    id: string;
+    title: string;
+    startDate?: string;
+    location?: string;
+  } | null;
 }
 
 // SG$ for Singapore, ₹ (INR) for everything else — matches the app convention.
@@ -200,7 +205,9 @@ export default function SupplierRequestForm() {
   // for this event's organizer and prefill; if none exists, they self-register
   // with the email locked in.
   const onSignedIn = async (rawEmail: string) => {
-    const clean = String(rawEmail || "").trim().toLowerCase();
+    const clean = String(rawEmail || "")
+      .trim()
+      .toLowerCase();
     if (!clean) {
       setGoogleLoading(false);
       toast({
@@ -399,8 +406,7 @@ export default function SupplierRequestForm() {
 
   const currency = data?.currency;
   const total = useMemo(
-    () =>
-      Object.values(prices).reduce((s, v) => s + (Number(v) || 0), 0),
+    () => Object.values(prices).reduce((s, v) => s + (Number(v) || 0), 0),
     [prices],
   );
 
@@ -662,7 +668,9 @@ export default function SupplierRequestForm() {
               {/* Each transfer the organizer made, with its proof */}
               {(req.payment?.installments?.length || 0) > 0 && (
                 <div className="border-t pt-3">
-                  <h4 className="mb-1.5 text-sm font-semibold">Payments received</h4>
+                  <h4 className="mb-1.5 text-sm font-semibold">
+                    Payments received
+                  </h4>
                   <ul className="space-y-1 text-xs">
                     {req.payment.installments.map((p: any, i: number) => (
                       <li
@@ -913,6 +921,7 @@ export default function SupplierRequestForm() {
               <div>
                 <Label className="text-xs">Contact number</Label>
                 <PhoneField
+                  defaultCountry={organizerPhoneCountry(data?.currency)}
                   format="e164"
                   value={phone}
                   onChange={setPhone}
@@ -947,7 +956,8 @@ export default function SupplierRequestForm() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <ClipboardList className="h-5 w-5 text-primary" /> Your quotation
+                <ClipboardList className="h-5 w-5 text-primary" /> Your
+                quotation
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -958,8 +968,8 @@ export default function SupplierRequestForm() {
               )}
               {(data?.requirements || []).some((r) => r.partiallyCovered) && (
                 <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
-                  Some items are already partly covered by other suppliers —
-                  the quantities below are what's still outstanding.
+                  Some items are already partly covered by other suppliers — the
+                  quantities below are what's still outstanding.
                 </p>
               )}
               {(data?.requirements || []).length === 0 ? (

@@ -92,6 +92,7 @@ import {
   normalizeReferralInput,
 } from "@/lib/eventReferral";
 import { getEventCoupon, normalizeCouponCode } from "@/lib/eventCoupon";
+import { organizerDialCode } from "@/lib/phone";
 import { ReferralCodeField } from "@/components/ui/ReferralCodeField";
 
 interface Country {
@@ -368,6 +369,9 @@ export default function TicketCart() {
         setWhatsappNumber(shopData.data.whatsAppNumber);
         setOrganizerInfo(shopData.data);
         setCountry(shopData?.data?.country);
+        // Dial-code dropdown starts on the organizer's country (editable).
+        const orgDial = organizerDialCode(shopData?.data?.country);
+        if (orgDial) setCountryCode(orgDial);
         setEmailId(shopData?.data?.email);
         setShopName(shopData?.data?._id);
       }

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useCountry } from "@/hooks/useCountry";
+import { organizerCountryName } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +36,7 @@ export function ShopkeeperRequestForm({
   onSubmit,
   events,
 }: ShopkeeperRequestFormProps) {
+  const { country: organizerCountry } = useCountry();
   const [formData, setFormData] = useState({
     // Business Information
     businessName: "",
@@ -56,7 +59,7 @@ export function ShopkeeperRequestForm({
     city: "",
     state: "",
     zipCode: "",
-    country: "",
+    country: organizerCountryName(organizerCountry),
 
     // Event Participation
     selectedEvents: [],

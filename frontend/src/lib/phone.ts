@@ -74,3 +74,25 @@ export function splitE164(value: string | null | undefined): {
     iso: country?.code ?? "",
   };
 }
+
+/**
+ * Defaults derived from the organizer's country (ISO-2, "IN" / "SG"), so
+ * visitor-facing booking forms open on the organizer's country. They are only
+ * starting values; visitors can still change them.
+ */
+export function organizerPhoneCountry(iso: string | null | undefined): string {
+  const code = String(iso ?? "").trim().toUpperCase();
+  return COUNTRIES.some((c) => c.code === code) ? code.toLowerCase() : "in";
+}
+
+/** "+65" for "SG"; "" when the country is unknown. */
+export function organizerDialCode(iso: string | null | undefined): string {
+  const code = String(iso ?? "").trim().toUpperCase();
+  return COUNTRIES.find((c) => c.code === code)?.dialCode ?? "";
+}
+
+/** "Singapore" for "SG"; "" when the country is unknown. */
+export function organizerCountryName(iso: string | null | undefined): string {
+  const code = String(iso ?? "").trim().toUpperCase();
+  return COUNTRIES.find((c) => c.code === code)?.name ?? "";
+}
