@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { PhoneField } from "@/components/ui/PhoneField";
-import { splitE164 } from "@/lib/phone";
+import { splitE164, organizerPhoneCountry } from "@/lib/phone";
 import {
   Loader2,
   CheckCircle2,
@@ -156,12 +156,16 @@ export default function SponsorApplicationForm() {
       try {
         const res = await fetch(`${apiURL}/sponsors/tiers/${eventId}`);
         const j = await res.json();
-        if (!res.ok) throw new Error(j?.message || "This page isn't available.");
+        if (!res.ok)
+          throw new Error(j?.message || "This page isn't available.");
         setData(j.data);
         // Arrived from the eventfront "Become a Sponsor" popup with a package
         // already chosen — preselect it so they don't pick twice.
         const wanted = new URLSearchParams(window.location.search).get("tier");
-        if (wanted && (j.data?.tiers || []).some((t: Tier) => t.id === wanted)) {
+        if (
+          wanted &&
+          (j.data?.tiers || []).some((t: Tier) => t.id === wanted)
+        ) {
           setTierId(wanted);
         }
       } catch (e: any) {
@@ -187,7 +191,9 @@ export default function SponsorApplicationForm() {
 
   // Once the Google email is verified, check whether they already applied.
   const onSignedIn = async (rawEmail: string) => {
-    const clean = String(rawEmail || "").trim().toLowerCase();
+    const clean = String(rawEmail || "")
+      .trim()
+      .toLowerCase();
     if (!clean) {
       setGoogleLoading(false);
       toast({
@@ -369,7 +375,8 @@ export default function SponsorApplicationForm() {
     setPayBusy(true);
     try {
       const fd = new window.FormData();
-      if (transactionId.trim()) fd.append("transactionId", transactionId.trim());
+      if (transactionId.trim())
+        fd.append("transactionId", transactionId.trim());
       fd.append("paymentMethod", paymentMethod);
       if (proof) fd.append("transactionScreenshot", proof);
       const res = await fetch(
@@ -503,9 +510,7 @@ export default function SponsorApplicationForm() {
       <div className="min-h-screen bg-muted/30 py-6 sm:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-4 px-3 sm:px-4">
           <div className="text-center">
-            <h1 className="text-2xl font-bold sm:text-3xl">
-              Your sponsorship
-            </h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">Your sponsorship</h1>
             <p className="text-sm text-muted-foreground">
               for <strong>{data?.event?.title || "the event"}</strong>
               {data?.event?.location ? ` · ${data.event.location}` : ""}
@@ -725,7 +730,9 @@ export default function SponsorApplicationForm() {
                       </div>
                       <div className="shrink-0 text-right font-bold">
                         <div>
-                          {t.price === 0 ? "Free" : money(t.price, data?.currency)}
+                          {t.price === 0
+                            ? "Free"
+                            : money(t.price, data?.currency)}
                         </div>
                         {t.collectPayment === false && (
                           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -805,6 +812,7 @@ export default function SponsorApplicationForm() {
               <div>
                 <Label className="text-xs">Contact number</Label>
                 <PhoneField
+                  defaultCountry={organizerPhoneCountry(data?.currency)}
                   format="e164"
                   value={phone}
                   onChange={setPhone}

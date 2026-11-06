@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { useCountryCodes } from "@/hooks/useCountryCodes";
+import { organizerDialCode } from "@/lib/phone";
 import {
   getEventReferral,
   isMalformedReferralInput,
@@ -119,7 +120,12 @@ const WorkshopCheckoutPage = () => {
     if (!item?.organizerId) return;
     fetch(`${apiURL}/organizers/profile-get/${item.organizerId}`)
       .then((r) => r.json())
-      .then((result) => setCountry(result?.data?.country || ""))
+      .then((result) => {
+        const c = result?.data?.country || "";
+        setCountry(c);
+        // Dial-code dropdown starts on the organizer's country (editable).
+        if (organizerDialCode(c)) setCountryCode(organizerDialCode(c));
+      })
       .catch(() => undefined);
   }, [item?.organizerId]);
 

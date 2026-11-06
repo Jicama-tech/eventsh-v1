@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneField } from "@/components/ui/PhoneField";
+import { organizerPhoneCountry } from "@/lib/phone";
 import {
   Heart,
   Check,
@@ -37,6 +38,8 @@ interface MarriageRsvpProps {
   // Optional custom heading for the invitation/RSVP form, set by the organizer
   // in the Event form (marriage.invitationTitle).
   invitationTitle?: string;
+  // Organizer's country (ISO-2); the phone fields open on it.
+  organizerCountry?: string;
 }
 
 interface GuestProfile {
@@ -67,6 +70,7 @@ export default function MarriageRsvp({
   eventId,
   functions = [],
   invitationTitle,
+  organizerCountry,
 }: MarriageRsvpProps) {
   const inviteHeading = (invitationTitle || "").trim();
   const { toast } = useToast();
@@ -416,6 +420,7 @@ export default function MarriageRsvp({
         <PhoneField
           format="e164"
           value={contactNumber}
+          defaultCountry={organizerPhoneCountry(organizerCountry)}
           onChange={setContactNumber}
           placeholder="Phone number"
         />
@@ -462,6 +467,7 @@ export default function MarriageRsvp({
                     <PhoneField
                       format="e164"
                       value={a.contactNumber}
+                      defaultCountry={organizerPhoneCountry(organizerCountry)}
                       onChange={(v) => setAtt(i, "contactNumber", v)}
                       placeholder="Contact no."
                     />

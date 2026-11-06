@@ -135,7 +135,12 @@ import {
   normalizeReferralInput,
 } from "@/lib/eventReferral";
 import { captureEventCoupon } from "@/lib/eventCoupon";
-import { phoneDigits, toE164 } from "@/lib/phone";
+import {
+  organizerCountryName,
+  organizerPhoneCountry,
+  phoneDigits,
+  toE164,
+} from "@/lib/phone";
 import { ReferralCodeField } from "@/components/ui/ReferralCodeField";
 import StallPaymentPanel from "./StallPaymentPanel";
 import PaymentFeedbackDialog from "./PaymentFeedbackDialog";
@@ -1376,6 +1381,22 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const [cropQueue, setCropQueue] = useState<File[]>([]);
 
   const [shopkeeperDetails, setShopkeeperDetails] = useState(initialForm);
+
+  // Nationality / Residency start on the organizer's country (still editable).
+  useEffect(() => {
+    const name = organizerCountryName(country);
+    if (!name) return;
+    setShopkeeperDetails((prev) =>
+      prev.businessOwnerNationality && prev.residency
+        ? prev
+        : {
+            ...prev,
+            businessOwnerNationality: prev.businessOwnerNationality || name,
+            residency: prev.residency || name,
+          },
+    );
+  }, [country, shopkeeperDetails.businessOwnerNationality, shopkeeperDetails.residency]);
+
   // The country picked in each phone field's flag dropdown (from
   // react-phone-input-2's onChange). Drives the per-country digit-length
   // check on submit (India 10, Singapore 8, …).
@@ -12746,7 +12767,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 // typed digits are dropped until the visitor
                                 // opens the flag menu. Default to the
                                 // organizer's country like the other forms.
-                                country={country === "SG" ? "sg" : "in"}
+                                country={organizerPhoneCountry(country)}
                                 enableSearch={true}
                                 countryCodeEditable={false}
                                 preferredCountries={[
@@ -12896,6 +12917,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                                   />
                                                   <PhoneInput
                                                     value={guest.whatsApp}
+                                                    country={organizerPhoneCountry(country)}
                                                     onChange={(value) =>
                                                       updateGuest(
                                                         "whatsApp",
@@ -13801,6 +13823,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           {/* Contact detail only — never used to sign in. */}
                           <PhoneInput
                             value={speakerFormData.phone}
+                            country={organizerPhoneCountry(country)}
                             onChange={(v: string) =>
                               setSpeakerFormData((p: any) => ({
                                 ...p,
@@ -14580,6 +14603,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       </label>
                       <PhoneInput
                         value={workshopHostFormData.hostPhone}
+                        country={organizerPhoneCountry(country)}
                         onChange={(v: string) =>
                           setWorkshopHostFormData((p) => ({
                             ...p,
@@ -15096,6 +15120,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <Label>WhatsApp Number *</Label>
                     <PhoneInput
                       value={scheduledSpaceForm.whatsappNumber}
+                      country={organizerPhoneCountry(country)}
                       onChange={(whatsappNumber: string, country: any) => {
                         setScheduledSpaceWhatsappCountry(country);
                         setScheduledSpaceForm((p) => ({
@@ -15125,6 +15150,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     <Label>Phone Number</Label>
                     <PhoneInput
                       value={scheduledSpaceForm.phone}
+                      country={organizerPhoneCountry(country)}
                       onChange={(phone: string, country: any) => {
                         setScheduledSpacePhoneCountry(country);
                         setScheduledSpaceForm((p) => ({ ...p, phone }));
@@ -18936,6 +18962,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </Label>
                         <PhoneInput
                           value={shopkeeperDetails.whatsappNumber}
+                          country={organizerPhoneCountry(country)}
                           onChange={(whatsappNumber, country) => {
                             setWhatsappCountry(country);
                             setShopkeeperDetails((prev) => ({
@@ -18967,6 +18994,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         </Label>
                         <PhoneInput
                           value={shopkeeperDetails.phone}
+                          country={organizerPhoneCountry(country)}
                           onChange={(phone, country) => {
                             setPhoneCountry(country);
                             setShopkeeperDetails((prev) => ({

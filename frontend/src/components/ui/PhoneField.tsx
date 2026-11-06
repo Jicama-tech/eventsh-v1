@@ -1,6 +1,7 @@
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
-import { toE164, toPhoneInputValue } from "@/lib/phone";
+import { useCountry } from "@/hooks/useCountry";
+import { organizerPhoneCountry, toE164, toPhoneInputValue } from "@/lib/phone";
 
 /**
  * Shared phone input with a country-code dropdown (flag + dial code + search).
@@ -18,7 +19,7 @@ export function PhoneField({
   onChange,
   placeholder,
   format = "digits",
-  defaultCountry = "in",
+  defaultCountry,
   id,
   name,
   disabled = false,
@@ -32,7 +33,10 @@ export function PhoneField({
   onChange: (value: string) => void;
   placeholder?: string;
   format?: "e164" | "digits";
-  /** ISO-2, lower case ("in", "sg"). Used until the value carries a code. */
+  /**
+   * ISO-2, lower case ("in", "sg"). Used until the value carries a code.
+   * Defaults to the signed-in organizer's country.
+   */
   defaultCountry?: string;
   id?: string;
   name?: string;
@@ -44,13 +48,14 @@ export function PhoneField({
   autoFocus?: boolean;
   onBlur?: () => void;
 }) {
+  const { country: organizerCountry } = useCountry();
   const height = compact ? "36px" : "40px";
   const radius = compact ? "6px" : "8px";
   return (
     <PhoneInput
       value={toPhoneInputValue(value)}
       onChange={(v) => onChange(format === "e164" ? toE164(v) : v)}
-      country={defaultCountry}
+      country={defaultCountry ?? organizerPhoneCountry(organizerCountry)}
       enableSearch
       countryCodeEditable={false}
       preferredCountries={["in", "sg", "us", "gb", "ae", "au"]}

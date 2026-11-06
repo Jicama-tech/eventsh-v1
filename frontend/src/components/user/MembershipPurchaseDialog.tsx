@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { buildPayNowQrUrl, describePayNowPayee } from "@/lib/paynowQr";
+import { organizerPhoneCountry } from "@/lib/phone";
 
 interface MembershipPlan {
   _id: string;
@@ -85,6 +86,7 @@ export function MembershipPurchaseDialog({
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("phone");
   const [whatsapp, setWhatsapp] = useState("");
+  const [orgCountry, setOrgCountry] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -151,6 +153,7 @@ export function MembershipPurchaseDialog({
           company: string | null;
         };
         if (cancelled) return;
+        setOrgCountry(info.country);
 
         // Dynamic PayNow QR — used when either UEN or payNowId is set.
         const dynamic = buildPayNowQrUrl({
@@ -398,7 +401,7 @@ export function MembershipPurchaseDialog({
               <PhoneInput
                 value={whatsapp}
                 onChange={(value) => setWhatsapp(value)}
-                country="in"
+                country={organizerPhoneCountry(orgCountry)}
                 enableSearch
                 countryCodeEditable={false}
                 preferredCountries={["in", "sg", "us", "gb", "ae", "au"]}
