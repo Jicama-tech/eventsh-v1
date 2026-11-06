@@ -122,6 +122,7 @@ export interface Event {
     hasSpeakers?: boolean;
     hasRoundTables?: boolean;
     hasWorkshops?: boolean;
+    hasScheduledSpaces?: boolean;
   };
   registrationFormFields?: {
     stall?: Record<string, boolean>;
@@ -1527,7 +1528,8 @@ const MyEvents: React.FC = () => {
                         {(event.features?.hasStalls ||
                           event.features?.hasSpeakers ||
                           event.features?.hasRoundTables ||
-                          event.features?.hasWorkshops) && (
+                          event.features?.hasWorkshops ||
+                          event.features?.hasScheduledSpaces) && (
                           <Button
                             variant="buttonOutline"
                             size="icon"
