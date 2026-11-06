@@ -68,11 +68,15 @@ export type QueuedEventAgent = {
   whatsAppNumber: string;
   email: string;
   maxUses: number;
+  /** A code the organizer chose; empty = generate one. */
+  referralCode?: string;
   extraContacts: AgentContact[];
 };
 
 type Draft = {
   name: string;
+  /** The organizer's own referral code; empty = generate one. */
+  referralCode: string;
   whatsAppNumber: string;
   email: string;
   maxUses: string;
@@ -81,6 +85,7 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = {
   name: "",
+  referralCode: "",
   whatsAppNumber: "",
   email: "",
   maxUses: "",
@@ -168,6 +173,7 @@ export async function createQueuedEventAgents(
         headers: authHeaders(true),
         body: JSON.stringify({
           name: q.name,
+          referralCode: q.referralCode || undefined,
           whatsAppNumber: q.whatsAppNumber || undefined,
           email: q.email || undefined,
           maxUses: q.maxUses || 0,
@@ -186,6 +192,7 @@ export async function createQueuedEventAgents(
 /** The fields of an existing agent being edited. */
 type AgentEditDraft = {
   name: string;
+  referralCode: string;
   whatsAppNumber: string;
   email: string;
   extraContacts: AgentContact[];
@@ -202,6 +209,113 @@ function editProblem(d: AgentEditDraft): string | null {
   }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return t("Enter a valid email address.");
   return contactsProblem(d.extraContacts);
+}
+
+const CODE_PATTERN = /^[A-Z0-9_-]{3,20}$/;
+
+/**
+ * The referral-code box. The organizer may type their own code (letters,
+ * digits, - and _, stored uppercase) or leave it empty to get a generated
+ * one. It warns as soon as the code is taken (by another agent here, or - for
+ * a saved event - anywhere in the system) and reports the problem to the
+ * parent, which refuses to save while there is one.
+ */
+function ReferralCodeInput({
+  id,
+  value,
+  onChange,
+  onProblem,
+  eventId,
+  agentId,
+  takenLocally,
+  disabled,
+}: {
+  id: string;
+  value: string;
+  onChange: (code: string) => void;
+  onProblem: (problem: string | null) => void;
+  eventId?: string | null;
+  /** The agent being edited, so its own code isn't flagged. */
+  agentId?: string;
+  /** Codes already held by agents listed on this screen. */
+  takenLocally: string[];
+  disabled?: boolean;
+}) {
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+
+  useEffect(() => {
+    const code = value.trim();
+    const report = (problem: string | null) => {
+      setMessage(problem);
+      setOk(!problem && !!code);
+      setChecking(false);
+      onProblem(problem);
+    };
+    if (!code) return report(null);
+    if (!CODE_PATTERN.test(code)) {
+      return report(t("Use 3-20 letters, digits, - or _ for the referral code (no spaces)."));
+    }
+    if (takenLocally.includes(code)) {
+      return report(t("The code {code} is already used by another agent. Please choose a different code.", { code }));
+    }
+    if (!eventId) return report(null);
+    // Saved event: ask the server (covers other events and operators too).
+    setChecking(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const qs = new URLSearchParams({ code });
+        if (agentId) qs.set("agentId", agentId);
+        const res = await fetch(
+          `${apiURL}/events/${encodeURIComponent(eventId)}/agents/code-available?${qs}`,
+          { headers: authHeaders() },
+        );
+        const body = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.ok && body && body.available === false) {
+          report(body.message || t("That code is already used. Please choose a different code."));
+        } else {
+          report(null);
+        }
+      } catch {
+        // Offline check failed: the server still refuses a taken code on save.
+        if (!cancelled) report(null);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, eventId, agentId, takenLocally.join("|")]);
+
+  return (
+    <div className="space-y-1">
+      <Input
+        id={id}
+        value={value}
+        maxLength={20}
+        disabled={disabled}
+        autoComplete="off"
+        className={message ? "border-red-500 focus-visible:ring-red-500" : undefined}
+        onChange={(e) => onChange(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))}
+        placeholder={t("Your own code, e.g. PRIYA10 (optional)")}
+      />
+      {message ? (
+        <p className="text-xs text-red-600">{message}</p>
+      ) : checking ? (
+        <p className="text-xs text-muted-foreground">{t("Checking the code…")}</p>
+      ) : ok ? (
+        <p className="text-xs text-green-600">{t("This code is available.")}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {t("Leave empty to get a generated code. Each agent needs a different code.")}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Name + number rows for an agent's sub-agents / extra contacts. */
@@ -300,6 +414,9 @@ export function EventAgentsTab({
   const [confirm, setConfirm] = useState<{ kind: "delete" | "regenerate"; agent: EventAgentView } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [maxDraft, setMaxDraft] = useState<Record<string, string>>({});
+  // A problem with the code being typed (taken / badly formed), per form.
+  const [draftCodeProblem, setDraftCodeProblem] = useState<string | null>(null);
+  const [editCodeProblem, setEditCodeProblem] = useState<Record<string, string | null>>({});
   // Existing agents whose extra contacts are being edited: agent id → rows.
   const [editing, setEditing] = useState<Record<string, AgentEditDraft>>({});
 
@@ -354,13 +471,14 @@ export function EventAgentsTab({
   // ---- add -------------------------------------------------------------
 
   const add = async () => {
-    const problem = draftProblem(draft);
+    const problem = draftProblem(draft) ?? draftCodeProblem;
     if (problem) {
       toast({ duration: 5000, variant: "destructive", title: t("Check the agent details"), description: problem });
       return;
     }
     const payload: QueuedEventAgent = {
       name: draft.name.trim(),
+      referralCode: draft.referralCode.trim(),
       whatsAppNumber: draft.whatsAppNumber.trim(),
       email: draft.email.trim().toLowerCase(),
       maxUses: Number(draft.maxUses.trim() || 0),
@@ -378,6 +496,7 @@ export function EventAgentsTab({
         headers: authHeaders(true),
         body: JSON.stringify({
           name: payload.name,
+          referralCode: payload.referralCode || undefined,
           whatsAppNumber: payload.whatsAppNumber || undefined,
           email: payload.email || undefined,
           maxUses: payload.maxUses,
@@ -409,7 +528,7 @@ export function EventAgentsTab({
   const patch = async (
     agent: EventAgentView,
     changes: Partial<
-      Pick<EventAgentView, "maxUses" | "isActive" | "extraContacts" | "name" | "whatsAppNumber" | "email">
+      Pick<EventAgentView, "maxUses" | "isActive" | "extraContacts" | "name" | "whatsAppNumber" | "email" | "referralCode">
     >,
   ): Promise<boolean> => {
     if (!eventId || busy) return false;
@@ -445,13 +564,16 @@ export function EventAgentsTab({
   const saveEdit = async (agent: EventAgentView) => {
     const d = editing[agent.id];
     if (!d) return;
-    const problem = editProblem(d);
+    const problem = editProblem(d) ?? editCodeProblem[agent.id] ?? null;
     if (problem) {
       toast({ duration: 5000, variant: "destructive", title: t("Check the agent details"), description: problem });
       return;
     }
+    const newCode = d.referralCode.trim();
     const ok = await patch(agent, {
       name: d.name.trim(),
+      // Only sent when changed; an emptied box keeps the current code.
+      ...(newCode && newCode !== agent.referralCode ? { referralCode: newCode } : {}),
       whatsAppNumber: d.whatsAppNumber.trim(),
       email: d.email.trim().toLowerCase(),
       extraContacts: cleanContacts(d.extraContacts),
@@ -597,6 +719,20 @@ export function EventAgentsTab({
               />
             </div>
             <div className="space-y-1.5">
+              <Label htmlFor="agent-code">{t("Referral code")}</Label>
+              <ReferralCodeInput
+                id="agent-code"
+                value={draft.referralCode}
+                onChange={(code) => setDraft((d) => ({ ...d, referralCode: code }))}
+                onProblem={setDraftCodeProblem}
+                eventId={eventId}
+                takenLocally={[
+                  ...queued.map((q) => q.referralCode || "").filter(Boolean),
+                  ...(agents ?? []).map((a) => a.referralCode),
+                ]}
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="agent-whatsapp">{t("WhatsApp number")}</Label>
               <PhoneField
                 id="agent-whatsapp"
@@ -647,7 +783,7 @@ export function EventAgentsTab({
             </Button>
             <span className="text-xs text-muted-foreground">
               {live
-                ? t("The referral code is generated as soon as the agent is added.")
+                ? t("Your own referral code is used if you typed one; otherwise one is generated when the agent is added.")
                 : t("Agents are created, and get their referral codes, when you save the event.")}
             </span>
           </div>
@@ -723,6 +859,7 @@ export function EventAgentsTab({
                   ...m,
                   [agent.id]: {
                     name: agent.name,
+                    referralCode: agent.referralCode,
                     whatsAppNumber: agent.whatsAppNumber,
                     email: agent.email,
                     extraContacts: (agent.extraContacts || []).map((c) => ({ ...c })),
@@ -744,6 +881,24 @@ export function EventAgentsTab({
                                 disabled={rowBusy}
                                 onChange={(e) => setEditing((m) => ({ ...m, [a.id]: { ...edit, name: e.target.value } }))}
                               />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`agent-edit-code-${a.id}`}>{t("Referral code")}</Label>
+                              <ReferralCodeInput
+                                id={`agent-edit-code-${a.id}`}
+                                value={edit.referralCode}
+                                disabled={rowBusy}
+                                eventId={eventId}
+                                agentId={a.id}
+                                takenLocally={(agents ?? []).filter((x) => x.id !== a.id).map((x) => x.referralCode)}
+                                onChange={(code) => setEditing((m) => ({ ...m, [a.id]: { ...edit, referralCode: code } }))}
+                                onProblem={(problem) => setEditCodeProblem((m) => ({ ...m, [a.id]: problem }))}
+                              />
+                              {edit.referralCode.trim() && edit.referralCode.trim() !== a.referralCode && (
+                                <p className="text-xs text-amber-600">
+                                  {t("Changing the code stops links with the old code from being credited.")}
+                                </p>
+                              )}
                             </div>
                             <div className="space-y-1.5">
                               <Label htmlFor={`agent-edit-wa-${a.id}`}>{t("WhatsApp number")}</Label>

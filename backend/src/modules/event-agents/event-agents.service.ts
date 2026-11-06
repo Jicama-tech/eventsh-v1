@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -25,6 +26,8 @@ import { EventAgent, EventAgentDocument } from "./schemas/event-agent.schema";
 import {
   CreateEventAgentDto,
   MAX_EXTRA_CONTACTS,
+  REFERRAL_CODE_MESSAGE,
+  REFERRAL_CODE_PATTERN,
   ShareEventAgentDto,
   UpdateEventAgentDto,
 } from "./dto/event-agent.dto";
@@ -162,8 +165,11 @@ export class EventAgentsService {
         `An event can have at most ${MAX_AGENTS_PER_EVENT} agents.`,
       );
     }
-    const referralCode = await this.uniqueCode();
-    const doc = await this.agentModel.create({
+    const referralCode = dto.referralCode
+      ? await this.assertCodeFree(dto.referralCode)
+      : await this.uniqueCode();
+    const doc = await this.agentModel
+      .create({
       eventId: event._id,
       organizerId: event.organizer,
       name: dto.name,
@@ -175,7 +181,8 @@ export class EventAgentsService {
       usedCount: 0,
       isActive: true,
       createdBy: String(actor?.userId || ""),
-    });
+      })
+      .catch(codeClash(referralCode));
     return toView(
       doc.toObject(),
       await this.eventLink(String(event.organizer), event),
@@ -190,6 +197,10 @@ export class EventAgentsService {
   ): Promise<EventAgentView> {
     const { event, agent } = await this.ownedAgent(eventId, agentId, actor);
     if (dto.name !== undefined) agent.name = dto.name;
+    if (dto.referralCode && dto.referralCode !== agent.referralCode) {
+      // A changed code: links carrying the old one stop being credited.
+      agent.referralCode = await this.assertCodeFree(dto.referralCode, agent._id);
+    }
     if (dto.whatsAppNumber !== undefined) agent.whatsAppNumber = dto.whatsAppNumber;
     if (dto.email !== undefined) agent.email = dto.email;
     if (dto.extraContacts !== undefined) {
@@ -202,7 +213,7 @@ export class EventAgentsService {
         "Keep a WhatsApp number or an email address, so the link can be sent to the agent.",
       );
     }
-    await agent.save();
+    await agent.save().catch(codeClash(agent.referralCode));
     return toView(
       agent.toObject(),
       await this.eventLink(String(event.organizer), event),
@@ -448,6 +459,53 @@ export class EventAgentsService {
     return `${fe}/events/${eventId}`;
   }
 
+  /**
+   * Is this organizer-chosen code free? Codes are unique across every event's
+   * agents and every operator, because `?ref=` carries one or the other.
+   * `exceptAgentId` is the agent being edited (its own code isn't a clash).
+   */
+  async isCodeAvailable(code: string, exceptAgentId?: unknown): Promise<boolean> {
+    const normalized = String(code ?? "").trim().toUpperCase();
+    const agentFilter: any = { referralCode: normalized };
+    if (exceptAgentId) agentFilter._id = { $ne: exceptAgentId };
+    const [agentTaken, operatorTaken] = await Promise.all([
+      this.agentModel.exists(agentFilter),
+      this.operatorModel.exists({ referralCode: normalized }),
+    ]);
+    return !agentTaken && !operatorTaken;
+  }
+
+  /** The code, or a 409 asking the organizer to pick another. */
+  private async assertCodeFree(code: string, exceptAgentId?: unknown): Promise<string> {
+    if (!(await this.isCodeAvailable(code, exceptAgentId))) {
+      throw new ConflictException(
+        `The code ${code} is already used by another agent. Please choose a different code.`,
+      );
+    }
+    return code;
+  }
+
+  /** Live check behind the form's "code already used" warning. */
+  async checkCode(
+    eventId: string,
+    code: string,
+    agentId: string | undefined,
+    actor: Actor,
+  ): Promise<{ available: boolean; message?: string }> {
+    await this.ownedEvent(eventId, actor);
+    const normalized = String(code ?? "").trim().toUpperCase();
+    if (!REFERRAL_CODE_PATTERN.test(normalized)) {
+      return { available: false, message: REFERRAL_CODE_MESSAGE };
+    }
+    const except = agentId && Types.ObjectId.isValid(agentId) ? agentId : undefined;
+    return (await this.isCodeAvailable(normalized, except))
+      ? { available: true }
+      : {
+          available: false,
+          message: `The code ${normalized} is already used by another agent. Please choose a different code.`,
+        };
+  }
+
   /** A code no event agent and no operator holds. */
   private async uniqueCode(): Promise<string> {
     for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -463,6 +521,18 @@ export class EventAgentsService {
     }
     throw new BadRequestException("Could not generate a referral code. Please try again.");
   }
+}
+
+/** Two saves racing for one code: the unique index loses the second. */
+function codeClash(code: string) {
+  return (err: any): never => {
+    if (err?.code === 11000) {
+      throw new ConflictException(
+        `The code ${code} is already used by another agent. Please choose a different code.`,
+      );
+    }
+    throw err;
+  };
 }
 
 /** Extra contacts as stored: trimmed, number required, capped. */
