@@ -356,7 +356,7 @@ export class EventAgentsService {
     extraContacts: { name: string; phone: string }[];
   } | null> {
     const normalized = String(code ?? "").trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,12}$/.test(normalized)) return null;
+    if (!/^[A-Z0-9_-]{3,20}$/.test(normalized)) return null;
     if (!Types.ObjectId.isValid(String(eventId ?? ""))) return null;
     const agent = await this.agentModel
       .findOne({
@@ -395,7 +395,7 @@ export class EventAgentsService {
     if (!event) return { required: false, valid: false };
     const required = !!(event as any).features?.hasAgents;
     const normalized = String(code ?? "").trim().toUpperCase();
-    if (!/^[A-Z0-9]{4,12}$/.test(normalized)) return { required, valid: false };
+    if (!/^[A-Z0-9_-]{3,20}$/.test(normalized)) return { required, valid: false };
     const agent = await this.agentModel.exists({
       eventId: new Types.ObjectId(String(eventId)),
       referralCode: normalized,
