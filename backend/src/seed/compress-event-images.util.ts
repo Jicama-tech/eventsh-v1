@@ -32,7 +32,7 @@ export async function compressDiskImage(
         fit: "inside",
         withoutEnlargement: true,
       })
-      .webp({ quality })
+      .webp({ quality, smartSubsample: true })
       .toBuffer();
 
     await fs.promises.writeFile(newPath, buf);
@@ -47,6 +47,13 @@ export async function compressDiskImage(
 }
 
 /**
+ * The hero banner is shown full-width (up to ~1920 CSS px, 2x on retina), so
+ * it keeps far more detail than gallery or add-on images: the old 1600px /
+ * q78 settings upscaled on wide screens and looked soft.
+ */
+const BANNER_COMPRESSION = { maxDim: 3200, quality: 92 };
+
+/**
  * Compress every image uploaded through the event create/update form
  * (banner, gallery, add-on images, speaker images). Order within each array
  * is preserved, so index-based mapping (add-ons / speakers) still lines up.
@@ -58,8 +65,10 @@ export async function compressEventUploadFiles(files: {
   speakerImages?: Express.Multer.File[];
 }): Promise<void> {
   if (!files) return;
+  await Promise.all(
+    (files.banner || []).map((f) => compressDiskImage(f, BANNER_COMPRESSION)),
+  );
   const all = [
-    ...(files.banner || []),
     ...(files.gallery || []),
     ...(files.addOnImages || []),
     ...(files.speakerImages || []),

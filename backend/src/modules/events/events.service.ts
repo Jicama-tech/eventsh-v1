@@ -21,6 +21,8 @@ import { OtpService } from "../otp/otp.service";
 // hyphens (no leading/trailing ones) — the DTO's @Matches already rejects
 // bad input client-side, but this is the actual stored-value guarantee.
 // Empty in, empty out (no slug provided/left over after stripping).
+import { sanitizeCustomFormFields } from "./custom-form-fields.util";
+
 function normalizeSlug(input: string): string {
   return (input || "")
     .trim()
@@ -1116,11 +1118,16 @@ export class EventsService {
       roundTable?: Record<string, boolean>;
       workshop?: Record<string, boolean>;
       scheduledSpace?: Record<string, boolean>;
+      customFields?: Record<string, any[]>;
     },
   ): Promise<Event> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(`Invalid event id: ${id}`);
     }
+    // Organizer-defined questions: keep only well-formed ones (bounded count
+    // and lengths) so the public form can render them without further checks.
+    const customFields = sanitizeCustomFormFields(registrationFormFields?.customFields);
+    registrationFormFields = { ...registrationFormFields, customFields };
     const updated = await this.eventModel
       .findByIdAndUpdate(id, { registrationFormFields }, { new: true })
       .exec();

@@ -514,6 +514,11 @@ const ScheduledSpaceRequests = ({
                     {selected.purpose}
                   </p>
                 )}
+                {(selected.customAnswers || []).map((a: any) => (
+                  <p key={a.id} className="text-xs text-muted-foreground">
+                    <span className="font-semibold">{a.label}:</span> {a.value}
+                  </p>
+                ))}
                 {scheduledSpaceFieldOn("companions") &&
                   (selected.companions || []).length > 0 && (
                     <div className="pt-1">

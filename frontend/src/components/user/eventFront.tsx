@@ -127,7 +127,11 @@ import StatusTimeline from "@/components/StatusTimeline";
 import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 import DemoPrompt from "./DemoPrompt";
 import { startDemoDashboard } from "@/lib/demoDashboard";
-import { isFieldEnabled as isRegFieldEnabled } from "@/lib/registrationFormFields";
+import {
+  getCustomFields,
+  isFieldEnabled as isRegFieldEnabled,
+  type RegistrationFormFieldsConfig,
+} from "@/lib/registrationFormFields";
 import {
   captureEventReferral,
   getEventReferral,
@@ -317,13 +321,7 @@ interface FetchedEvent {
     /** Agents section on = referral-only booking. */
     hasAgents?: boolean;
   };
-  registrationFormFields?: {
-    stall?: Record<string, boolean>;
-    speaker?: Record<string, boolean>;
-    roundTable?: Record<string, boolean>;
-    workshop?: Record<string, boolean>;
-    scheduledSpace?: Record<string, boolean>;
-  };
+  registrationFormFields?: RegistrationFormFieldsConfig;
   ageRestriction: string;
   dresscode: string;
   specialInstructions: string;
@@ -993,6 +991,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     organization: "",
     companions: [] as string[],
   });
+  // Answers to the organizer's own questions (Registration Forms tab), by id.
+  const [scheduledSpaceCustomAnswers, setScheduledSpaceCustomAnswers] =
+    useState<Record<string, string>>({});
   // Selected-country objects for the WhatsApp/Phone PhoneInput fields — drive
   // the "Enter N digits for Country" hint, same as the Stall form's fields.
   const [scheduledSpaceWhatsappCountry, setScheduledSpaceWhatsappCountry] =
@@ -2121,6 +2122,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       organization: "",
       companions: [],
     });
+    setScheduledSpaceCustomAnswers({});
     setScheduledSpaceStep("auth");
     setShowScheduledSpaceForm(true);
     // Fetch slot availability now (not just after registration) so the
@@ -2285,6 +2287,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       organization: "",
       companions: [],
     });
+    setScheduledSpaceCustomAnswers({});
     setScheduledSpaceStep("form");
     setShowScheduledSpaceForm(true);
     fetchAvailableScheduledSpaces();
@@ -2452,6 +2455,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       !scheduledSpaceForm.facilityType
     )
       missing.push("Type of Space Required");
+    for (const f of getCustomFields(
+      eventData?.registrationFormFields,
+      "scheduledSpace",
+    )) {
+      if (f.required && !scheduledSpaceCustomAnswers[f.id]?.trim())
+        missing.push(f.label);
+    }
     if (referralRequired && !bookingReferralCode())
       missing.push("Referral code");
     const referralProblem = referralInputProblem();
@@ -2497,6 +2507,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           facilityTypeRequested: scheduledSpaceForm.facilityType || undefined,
           purpose: scheduledSpaceForm.purpose || undefined,
           organization: scheduledSpaceForm.organization || undefined,
+          customAnswers: scheduledSpaceCustomAnswers,
           // Typed on the form, else the agent / operator share link (?ref).
           referralCode: bookingReferralCode(),
           companions: scheduledSpaceForm.companions
@@ -15245,6 +15256,48 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                     />
                   </div>
                 )}
+                {getCustomFields(
+                  eventData?.registrationFormFields,
+                  "scheduledSpace",
+                ).map((f) => {
+                  const value = scheduledSpaceCustomAnswers[f.id] ?? "";
+                  const setValue = (v: string) =>
+                    setScheduledSpaceCustomAnswers((p) => ({ ...p, [f.id]: v }));
+                  return (
+                    <div key={f.id}>
+                      <Label>
+                        {f.label}
+                        {f.required ? " *" : ""}
+                      </Label>
+                      {f.type === "textarea" ? (
+                        <Textarea
+                          value={value}
+                          maxLength={1000}
+                          onChange={(e) => setValue(e.target.value)}
+                        />
+                      ) : f.type === "select" ? (
+                        <Select value={value} onValueChange={setValue}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select an option" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(f.options || []).map((o) => (
+                              <SelectItem key={o} value={o}>
+                                {o}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={value}
+                          maxLength={1000}
+                          onChange={(e) => setValue(e.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
                 {scheduledSpaceOn("companions") && (
                   <div>
                     <Label>Persons Coming With You</Label>

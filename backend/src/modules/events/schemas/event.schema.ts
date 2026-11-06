@@ -715,6 +715,9 @@ export class Event {
     roundTable?: Record<string, boolean>;
     workshop?: Record<string, boolean>;
     scheduledSpace?: Record<string, boolean>;
+    // Organizer-defined extra questions per form, e.g. customFields.scheduledSpace
+    // = [{ id, label, type: "text" | "textarea" | "select", required, options? }].
+    customFields?: Record<string, any[]>;
   };
 
   @Prop()

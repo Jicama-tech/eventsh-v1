@@ -108,6 +108,10 @@ export class ScheduledSpaceRequest {
   @Prop()
   organization?: string;
 
+  // Answers to the organizer's custom form questions (label kept with each).
+  @Prop({ type: [Object], default: [] })
+  customAnswers?: { id: string; label: string; value: string }[];
+
   // Operator attribution from the shared event link (?ref=). Set only by
   // the server once the code resolves to a referral-enabled operator of
   // this event's organizer (uppercased code) — shown in the organizer's

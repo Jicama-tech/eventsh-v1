@@ -2,6 +2,7 @@ import {
   IsArray,
   IsEmail,
   IsMongoId,
+  IsObject,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -50,6 +51,11 @@ export class RegisterScheduledSpaceDto {
   @IsArray()
   @IsString({ each: true })
   companions?: string[];
+
+  // Answers to the organizer-defined custom questions, keyed by field id.
+  @IsOptional()
+  @IsObject()
+  customAnswers?: Record<string, string>;
 
   // Operator referral code from the shared event link (?ref=) — optional.
   // Only used to attribute the request to that operator; it doesn't filter
