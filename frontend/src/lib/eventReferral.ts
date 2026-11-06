@@ -13,7 +13,9 @@
  */
 const KEY_PREFIX = "eventsh:ref:";
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const CODE_PATTERN = /^[A-Z0-9]{4,12}$/;
+// Generated codes are 7 letters/digits; organizers may pick their own
+// (3-20 of A-Z, 0-9, - or _) - keep in step with the backend.
+const CODE_PATTERN = /^[A-Z0-9_-]{3,20}$/;
 
 interface StoredReferral {
   code: string;

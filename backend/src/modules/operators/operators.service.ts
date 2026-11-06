@@ -271,7 +271,7 @@ export class OperatorsService {
   ): Promise<boolean> {
     try {
       const normalized = String(code ?? "").trim().toUpperCase();
-      if (!/^[A-Z0-9]{4,12}$/.test(normalized) || !organizerId) return false;
+      if (!/^[A-Z0-9_-]{3,20}$/.test(normalized) || !organizerId) return false;
       if (await this.findByReferralCode(organizerId, normalized)) return true;
       if (!eventId || !Types.ObjectId.isValid(String(eventId))) return false;
       if (!Types.ObjectId.isValid(String(organizerId))) return false;
@@ -310,7 +310,7 @@ export class OperatorsService {
   ): Promise<ReferralAttribution | null> {
     try {
       const normalized = String(code ?? "").trim().toUpperCase();
-      if (!/^[A-Z0-9]{4,12}$/.test(normalized)) return null;
+      if (!/^[A-Z0-9_-]{3,20}$/.test(normalized)) return null;
       if (!organizerId) return null;
       const operator = await this.findByReferralCode(organizerId, normalized);
       if (operator) {

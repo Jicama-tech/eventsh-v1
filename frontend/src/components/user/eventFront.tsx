@@ -601,7 +601,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       : normalizeReferralInput(referralInput) || undefined;
   const referralInputProblem = (): string | null =>
     !referralLocked && isMalformedReferralInput(referralInput)
-      ? "Referral codes are 4 to 12 letters or digits. Check the code your agent shared, or clear the field."
+      ? "Referral codes are 3 to 20 letters, digits, - or _. Check the code your agent shared, or clear the field."
       : null;
   // Agents section on (event form → Venue → Event Sections) = referral-only
   // booking: every form asks for the code first and the server refuses a

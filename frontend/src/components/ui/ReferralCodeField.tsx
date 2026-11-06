@@ -48,7 +48,7 @@ export function ReferralCodeField({
         value={value}
         onChange={(e) => onChange(e.target.value.toUpperCase())}
         placeholder="e.g. AB12CD"
-        maxLength={12}
+        maxLength={20}
         autoCapitalize="characters"
         autoComplete="off"
         spellCheck={false}
@@ -64,7 +64,7 @@ export function ReferralCodeField({
         </p>
       ) : malformed ? (
         <p className="text-xs text-red-500 mt-1">
-          Codes are 4 to 12 letters or digits.
+          Codes are 3 to 20 letters, digits, - or _.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground mt-1">

@@ -1027,7 +1027,7 @@ export default function TicketCart() {
         duration: 5000,
         title: "Check the referral code",
         description:
-          "Referral codes are 4 to 12 letters or digits. Check the code your agent shared, or clear the field.",
+          "Referral codes are 3 to 20 letters, digits, - or _. Check the code your agent shared, or clear the field.",
         variant: "destructive",
       });
       return;
