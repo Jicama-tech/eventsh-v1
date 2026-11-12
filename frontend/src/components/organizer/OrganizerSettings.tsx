@@ -73,8 +73,10 @@ import {
   Award,
   Copy,
   RefreshCw,
+  Plug,
 } from "lucide-react";
 import { MembershipPanel } from "./MembershipPanel";
+import { ComboxConnector } from "./ComboxConnector";
 import { WhatsAppSettings } from "./whatsapp/WhatsAppSettings";
 import { jwtDecode } from "jwt-decode";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -1851,7 +1853,7 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <Store className="w-4 h-4" />
             Profile
@@ -1879,6 +1881,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
           <TabsTrigger value="payments" className="flex items-center gap-2">
             <CreditCard className="w-4 h-4" />
             Payments
+          </TabsTrigger>
+          <TabsTrigger value="combox" className="flex items-center gap-2">
+            <Plug className="w-4 h-4" />
+            ComBox
           </TabsTrigger>
           {/* <TabsTrigger value="receipts" className="flex items-center gap-2">
             <ReceiptTextIcon className="w-4 h-4" />
@@ -4862,6 +4868,10 @@ export function OrganizerSettings({ onSave }: ShopkeeperSettingsProps) {
               </CardContent>
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="combox" className="space-y-4">
+          <ComboxConnector />
         </TabsContent>
 
         <TabsContent value="shipping">
