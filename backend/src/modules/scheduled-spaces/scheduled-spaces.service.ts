@@ -1093,6 +1093,213 @@ export class ScheduledSpacesService {
     };
   }
 
+  // Organizer analytics for the event's Scheduled Spaces: per-space, per-slot
+  // capacity / booked / available (head-count for shared slots, whole-slot for
+  // exclusive ones), who holds each slot, plus roll-ups by facility type and
+  // date and the request funnel. Availability is read off the same ledgers
+  // getAvailableSpaces / selectSlots use, so the numbers can't disagree with
+  // what visitors are offered. "Not for sale" facilities are layout
+  // references — listed, flagged, and left out of every total.
+  async getAnalytics(eventId: string) {
+    if (!Types.ObjectId.isValid(eventId)) {
+      throw new BadRequestException("Invalid event id");
+    }
+    const event = await this.eventModel.findById(eventId);
+    if (!event) throw new NotFoundException("Event not found");
+
+    const requests = await this.requestModel
+      .find({ eventId: new Types.ObjectId(eventId) })
+      .sort({ createdAt: -1 });
+
+    const HOLDING = new Set<string>([
+      ScheduledSpaceStatusEnum.Processing,
+      ScheduledSpaceStatusEnum.Completed,
+    ]);
+    const holders = new Map<string, any[]>();
+    for (const r of requests) {
+      if (!HOLDING.has(r.status)) continue;
+      for (const s of r.selectedSlots || []) {
+        const token = `${s.positionId}:${s.slotId}`;
+        const list = holders.get(token) || [];
+        list.push({
+          requestId: String(r._id),
+          name: r.name,
+          email: r.email,
+          persons: s.persons && s.persons > 0 ? s.persons : r.partySize || 1,
+          status: r.status,
+          paymentStatus: r.paymentStatus,
+          price: s.price || 0,
+          checkedIn: !!r.hasCheckedIn,
+        });
+        holders.set(token, list);
+      }
+    }
+
+    const bookedTokens = new Set<string>(event.scheduledSpaceBookedSlots || []);
+    const personsBooked: Record<string, number> =
+      (event as any).scheduledSpaceSlotPersons || {};
+
+    const byFacility = new Map<string, any>();
+    const byDate = new Map<string, any>();
+    const totals = {
+      spaces: 0,
+      slots: 0,
+      slotsFull: 0,
+      slotsPartial: 0,
+      slotsAvailable: 0,
+      // Seat figures cover every slot (an exclusive slot counts as 1 seat).
+      capacity: 0,
+      booked: 0,
+    };
+
+    const spaces = (event.venueScheduledSpaces || [])
+      .map((s: any) => (s?.toObject ? s.toObject() : s))
+      .map((s: any) => {
+        const forSale = this.isForSale(event, s);
+        const maxPersons = this.maxPersonsOf(event, s);
+        const shared = maxPersons > 0;
+        const slots = (s.slots || []).map((slot: any) => {
+          const token = `${s.positionId}:${slot.id}`;
+          let capacity = 1;
+          let booked = 0;
+          if (shared) {
+            capacity = maxPersons;
+            booked = bookedTokens.has(token)
+              ? maxPersons
+              : Math.min(
+                  maxPersons,
+                  Math.max(
+                    0,
+                    Number(personsBooked[this.personsKey(token)]) || 0,
+                  ),
+                );
+          } else {
+            booked = bookedTokens.has(token) ? 1 : 0;
+          }
+          const remaining = Math.max(0, capacity - booked);
+          const state =
+            remaining === 0 ? "full" : booked > 0 ? "partial" : "available";
+          const slotHolders = holders.get(token) || [];
+
+          if (forSale) {
+            totals.slots += 1;
+            totals.capacity += capacity;
+            totals.booked += booked;
+            if (state === "full") totals.slotsFull += 1;
+            else if (state === "partial") totals.slotsPartial += 1;
+            else totals.slotsAvailable += 1;
+
+            const ft = s.facilityType || "Other";
+            const f = byFacility.get(ft) || {
+              facilityType: ft,
+              spaces: new Set<string>(),
+              slots: 0,
+              slotsFull: 0,
+              capacity: 0,
+              booked: 0,
+            };
+            f.spaces.add(s.positionId);
+            f.slots += 1;
+            if (state === "full") f.slotsFull += 1;
+            f.capacity += capacity;
+            f.booked += booked;
+            byFacility.set(ft, f);
+
+            const d = byDate.get(slot.date) || {
+              date: slot.date,
+              slots: 0,
+              slotsFull: 0,
+              capacity: 0,
+              booked: 0,
+            };
+            d.slots += 1;
+            if (state === "full") d.slotsFull += 1;
+            d.capacity += capacity;
+            d.booked += booked;
+            byDate.set(slot.date, d);
+          }
+
+          return {
+            slotId: slot.id,
+            label: slot.label,
+            date: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            capacity,
+            booked,
+            remaining,
+            state,
+            holders: slotHolders,
+          };
+        });
+        if (forSale) totals.spaces += 1;
+        return {
+          positionId: s.positionId,
+          name: s.name,
+          facilityType: s.facilityType,
+          price: s.price || 0,
+          forSale,
+          instantTicket: !this.requiresApproval(event, s),
+          shared,
+          maxPersons: shared ? maxPersons : undefined,
+          slots,
+        };
+      });
+
+    // Request funnel + money. Confirmed = registered, no slots picked yet.
+    const statusCounts: Record<string, number> = {};
+    let revenueConfirmed = 0;
+    let revenuePending = 0;
+    let people = 0;
+    let checkedIn = 0;
+    for (const r of requests) {
+      statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+      const slotValue = (r.selectedSlots || []).reduce(
+        (sum: number, s: any) => sum + (s.price || 0),
+        0,
+      );
+      if (r.status === ScheduledSpaceStatusEnum.Completed) {
+        revenueConfirmed += slotValue;
+        people += r.partySize || 1;
+        if (r.hasCheckedIn) checkedIn += 1;
+      } else if (r.status === ScheduledSpaceStatusEnum.Processing) {
+        revenuePending += slotValue;
+        people += r.partySize || 1;
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        totals: {
+          ...totals,
+          capacityRemaining: Math.max(0, totals.capacity - totals.booked),
+          occupancy: totals.capacity
+            ? Math.round((totals.booked / totals.capacity) * 100)
+            : 0,
+        },
+        requests: {
+          total: requests.length,
+          byStatus: statusCounts,
+          registeredNoSlots:
+            statusCounts[ScheduledSpaceStatusEnum.Confirmed] || 0,
+          people,
+          checkedIn,
+          revenueConfirmed,
+          revenuePending,
+        },
+        byFacility: Array.from(byFacility.values()).map((f) => ({
+          ...f,
+          spaces: f.spaces.size,
+        })),
+        byDate: Array.from(byDate.values()).sort((a, b) =>
+          String(a.date).localeCompare(String(b.date)),
+        ),
+        spaces,
+      },
+    };
+  }
+
   async findByEventId(eventId: string) {
     if (!Types.ObjectId.isValid(eventId)) {
       throw new BadRequestException("Invalid event id");
