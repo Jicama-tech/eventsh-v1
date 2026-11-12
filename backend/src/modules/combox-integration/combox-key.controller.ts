@@ -28,7 +28,12 @@ export class ComboxKeyController {
     if (ownerOnly && req.user?.operatorId) {
       throw new ForbiddenException("Only the organizer can manage the ComBox key");
     }
-    return String(req.user.userId);
+    // JwtAuthGuard leaves the raw token on req.user (organizer id = sub); AuthGuard("jwt") maps it to userId
+    const id = String(req.user?.userId ?? req.user?.sub ?? "");
+    if (!/^[a-f0-9]{24}$/i.test(id)) {
+      throw new ForbiddenException("Could not tell which organizer you are. Log in again.");
+    }
+    return id;
   }
 
   @Get()
