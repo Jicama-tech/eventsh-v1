@@ -1079,6 +1079,19 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
     return map;
   }, [scheduledSpacesAvailable]);
+  // Most people one booking may cover (the booker included) for the chosen
+  // space type — the largest per-slot cap among that type's spaces, or every
+  // space when no type is chosen. null = no cap (some matching space has no
+  // per-slot limit, or nothing is loaded yet).
+  const scheduledSpaceMaxPersons = useMemo(() => {
+    const ft = scheduledSpaceForm.facilityType;
+    const pool = (scheduledSpacesAvailable as any[]).filter(
+      (s) => !ft || s.facilityType === ft,
+    );
+    if (pool.length === 0) return null;
+    if (pool.some((s) => !s.maxPersons)) return null;
+    return Math.max(...pool.map((s) => Number(s.maxPersons)));
+  }, [scheduledSpacesAvailable, scheduledSpaceForm.facilityType]);
   // Slot picker narrows to the facility type the registrant asked for (when
   // that field was collected) — otherwise every placed space is shown.
   const filteredScheduledSpaces = useMemo(() => {
@@ -2519,6 +2532,17 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         duration: 5000,
         title: "Please fill in all required fields",
         description: missing.join(", "),
+        variant: "destructive",
+      });
+      return;
+    }
+    const groupSize =
+      1 + scheduledSpaceForm.companions.filter((c) => c.trim()).length;
+    if (scheduledSpaceMaxPersons && groupSize > scheduledSpaceMaxPersons) {
+      toast({
+        duration: 5000,
+        title: "Too many people",
+        description: `This space allows at most ${scheduledSpaceMaxPersons} person${scheduledSpaceMaxPersons === 1 ? "" : "s"} per booking, including you.`,
         variant: "destructive",
       });
       return;
@@ -15374,11 +15398,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         .length === 0
                         ? ""
                         : "s"}
-                      {(scheduledSpacesAvailable as any[]).some(
-                        (s: any) => s?.maxPersons,
-                      )
-                        ? ". Some slots are shared between bookings — you'll only be offered the ones with room for your group."
-                        : "."}
+                      {scheduledSpaceMaxPersons
+                        ? `. This space allows at most ${scheduledSpaceMaxPersons} person${scheduledSpaceMaxPersons === 1 ? "" : "s"} per booking, including you.`
+                        : (scheduledSpacesAvailable as any[]).some(
+                              (s: any) => s?.maxPersons,
+                            )
+                          ? ". Some slots are shared between bookings — you'll only be offered the ones with room for your group."
+                          : "."}
                     </p>
                     <div className="space-y-2 mt-1">
                       {scheduledSpaceForm.companions.map((c, i) => (
@@ -15415,6 +15441,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                         type="button"
                         variant="outline"
                         size="sm"
+                        disabled={
+                          !!scheduledSpaceMaxPersons &&
+                          1 + scheduledSpaceForm.companions.length >=
+                            scheduledSpaceMaxPersons
+                        }
                         onClick={() =>
                           setScheduledSpaceForm((p) => ({
                             ...p,
