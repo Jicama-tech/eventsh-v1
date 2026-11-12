@@ -1,5 +1,6 @@
 import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
+import { JwtService } from "@nestjs/jwt";
 import { OrganizersModule } from "../organizers/organizers.module";
 import { EventSchema } from "../events/schemas/event.schema";
 import { TicketSchema } from "../tickets/entities/ticket.entity";
@@ -21,6 +22,7 @@ import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
     ]),
   ],
   controllers: [ComboxIntegrationController, ComboxKeyController],
-  providers: [ComboxKeyService, ComboxKeyGuard],
+  // JwtAuthGuard (the key controller) injects JwtService, as in otp.module
+  providers: [ComboxKeyService, ComboxKeyGuard, JwtService],
 })
 export class ComboxIntegrationModule {}
