@@ -52,6 +52,7 @@ import { PlatformSyncModule } from "./modules/platform-sync/platform-sync.module
 import { WhatsappModule } from "./modules/whatsapp/whatsapp.module";
 import { CampaignsModule } from "./modules/campaigns/campaigns.module";
 import { EventAgentsModule } from "./modules/event-agents/event-agents.module";
+import { ComboxIntegrationModule } from "./modules/combox-integration/combox-integration.module";
 
 @Module({
   imports: [
@@ -127,6 +128,7 @@ import { EventAgentsModule } from "./modules/event-agents/event-agents.module";
     CampaignsModule,
     // Per-event agents with referral links (the event form's Agents tab).
     EventAgentsModule,
+    ComboxIntegrationModule,
   ],
   providers: [
     // Read-only demo sessions can never mutate real data via the API.
