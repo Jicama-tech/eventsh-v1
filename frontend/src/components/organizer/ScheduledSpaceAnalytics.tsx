@@ -325,28 +325,6 @@ export function ScheduledSpaceAnalytics({
         </div>
       )}
 
-      {/* By date */}
-      {data.byDate.length > 0 && (
-        <div>
-          <p className="mb-2 text-sm font-medium text-stone-700">By date</p>
-          <div className="divide-y rounded-xl border">
-            {data.byDate.map((d: any) => (
-              <div key={d.date} className="space-y-1.5 px-4 py-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-stone-800">
-                    {new Date(`${d.date}T00:00:00`).toDateString()}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {d.slots} slots · {d.slotsFull} full · {d.booked}/{d.capacity} seats
-                  </span>
-                </div>
-                <Bar value={d.booked} max={d.capacity} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Every space → its slots */}
       <div>
         <p className="mb-2 text-sm font-medium text-stone-700">
