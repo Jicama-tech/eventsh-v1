@@ -20,6 +20,7 @@ import * as path from "path";
 import { ScheduledSpacesService } from "./scheduled-spaces.service";
 import { RegisterScheduledSpaceDto } from "./dto/register.dto";
 import { SelectSlotsDto } from "./dto/select-slots.dto";
+import { UpdateScheduledSpaceDetailsDto } from "./dto/update-details.dto";
 import { ConfirmScheduledSpacePaymentDto } from "./dto/confirm-payment.dto";
 import { UpdateScheduledSpaceStatusDto } from "./dto/update-status.dto";
 import { ScanScheduledSpaceQRDto } from "./dto/scan-qr.dto";
@@ -96,6 +97,14 @@ export class ScheduledSpacesController {
   @Get("available/:eventId")
   async getAvailableSpaces(@Param("eventId") eventId: string) {
     return await this.scheduledSpacesService.getAvailableSpaces(eventId);
+  }
+
+  @Patch(":id/details")
+  async updateDetails(
+    @Param("id") id: string,
+    @Body() dto: UpdateScheduledSpaceDetailsDto,
+  ) {
+    return await this.scheduledSpacesService.updateDetails(id, dto);
   }
 
   @Patch(":id/select-slots")

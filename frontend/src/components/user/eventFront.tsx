@@ -973,6 +973,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   ] = useState(false);
   // "auth" (Google sign-in gate) → "form" (details). Mirrors the Rent-a-
   // Stall / Become-a-Sponsor flows' Google-first pattern.
+  const [scheduledSpaceEditing, setScheduledSpaceEditing] = useState(false);
   const [scheduledSpaceStep, setScheduledSpaceStep] = useState<"auth" | "form">(
     "auth",
   );
@@ -2089,6 +2090,40 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   // --- Scheduled Spaces booking workflow ---
 
+  // "Your details" stepper click from the slot picker: reopens the
+  // registration form prefilled with what was submitted, in edit mode (saves
+  // via PATCH instead of registering a second request).
+  const editScheduledSpaceDetails = () => {
+    const r: any = existingScheduledSpaceRequest;
+    if (!r) return;
+    const answers: Record<string, string> = {};
+    for (const a of r.customAnswers || []) answers[a.id] = a.value;
+    setScheduledSpaceForm({
+      name: r.name || "",
+      email: r.email || "",
+      phone: r.phone ? String(r.phone).replace(/^\+/, "") : "",
+      whatsappNumber: r.whatsappNumber
+        ? String(r.whatsappNumber).replace(/^\+/, "")
+        : "",
+      facilityType: r.facilityTypeRequested || "",
+      purpose: r.purpose || "",
+      organization: r.organization || "",
+      companions: [...(r.companions || [])],
+    });
+    setScheduledSpaceCustomAnswers(answers);
+    setScheduledSpaceEditing(true);
+    setScheduledSpaceStep("form");
+    setShowScheduledSpacePicker(false);
+    setShowScheduledSpaceForm(true);
+  };
+
+  // Stepper click from the edit form back to "Space & pay" without saving.
+  const backToScheduledSpacePicker = () => {
+    setShowScheduledSpaceForm(false);
+    setScheduledSpaceEditing(false);
+    setShowScheduledSpacePicker(true);
+  };
+
   const routeScheduledSpaceRequest = (request: any) => {
     setExistingScheduledSpaceRequest(request);
     if (request.status === "Confirmed") {
@@ -2123,6 +2158,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       companions: [],
     });
     setScheduledSpaceCustomAnswers({});
+    setScheduledSpaceEditing(false);
     setScheduledSpaceStep("auth");
     setShowScheduledSpaceForm(true);
     // Fetch slot availability now (not just after registration) so the
@@ -2288,6 +2324,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       companions: [],
     });
     setScheduledSpaceCustomAnswers({});
+    setScheduledSpaceEditing(false);
     setScheduledSpaceStep("form");
     setShowScheduledSpaceForm(true);
     fetchAvailableScheduledSpaces();
@@ -2462,17 +2499,20 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       if (f.required && !scheduledSpaceCustomAnswers[f.id]?.trim())
         missing.push(f.label);
     }
-    if (referralRequired && !bookingReferralCode())
-      missing.push("Referral code");
-    const referralProblem = referralInputProblem();
-    if (referralProblem) {
-      toast({
-        duration: 5000,
-        title: "Check the referral code",
-        description: referralProblem,
-        variant: "destructive",
-      });
-      return;
+    // The referral code was settled at registration — not re-checked on edit.
+    if (!scheduledSpaceEditing) {
+      if (referralRequired && !bookingReferralCode())
+        missing.push("Referral code");
+      const referralProblem = referralInputProblem();
+      if (referralProblem) {
+        toast({
+          duration: 5000,
+          title: "Check the referral code",
+          description: referralProblem,
+          variant: "destructive",
+        });
+        return;
+      }
     }
     if (missing.length > 0) {
       toast({
@@ -2485,14 +2525,25 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
     }
     setScheduledSpaceLoading(true);
     try {
-      const res = await fetch(`${apiURL}/scheduled-spaces/register`, {
-        method: "POST",
+      const editingId = scheduledSpaceEditing
+        ? (existingScheduledSpaceRequest as any)?._id
+        : null;
+      const res = await fetch(
+        editingId
+          ? `${apiURL}/scheduled-spaces/${editingId}/details`
+          : `${apiURL}/scheduled-spaces/register`,
+        {
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          eventId: (eventData as any)?._id,
-          organizerId: (eventData as any)?.organizer?._id,
+          ...(editingId
+            ? {}
+            : {
+                eventId: (eventData as any)?._id,
+                organizerId: (eventData as any)?.organizer?._id,
+                email: scheduledSpaceForm.email,
+              }),
           name: scheduledSpaceForm.name,
-          email: scheduledSpaceForm.email,
           // Stored as E.164 ("+<dial><number>") like every number in the app.
           // The phone is optional: picking a country only fills in its dial
           // code, and that alone isn't a number, so it isn't sent.
@@ -2509,24 +2560,26 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           organization: scheduledSpaceForm.organization || undefined,
           customAnswers: scheduledSpaceCustomAnswers,
           // Typed on the form, else the agent / operator share link (?ref).
-          referralCode: bookingReferralCode(),
+          ...(editingId ? {} : { referralCode: bookingReferralCode() }),
           companions: scheduledSpaceForm.companions
             .map((c) => c.trim())
             .filter(Boolean),
         }),
-      });
+        },
+      );
       const result = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(result?.message || "Failed to submit registration");
       }
       setShowScheduledSpaceForm(false);
+      setScheduledSpaceEditing(false);
       // No approval gate — registration is confirmed immediately, so this
       // routes straight into the slot picker (routeScheduledSpaceRequest
       // treats "Confirmed" as "go pick a space & time slot now").
       routeScheduledSpaceRequest(result.data);
       toast({
         duration: 5000,
-        title: "Registration confirmed",
+        title: editingId ? "Details updated" : "Registration confirmed",
         description: "Pick your space and time slot to continue.",
       });
     } catch (err: any) {
@@ -15050,7 +15103,10 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       {/* Scheduled Spaces — Google sign-in gate, then registration form. */}
       <Dialog
         open={showScheduledSpaceForm}
-        onOpenChange={setShowScheduledSpaceForm}
+        onOpenChange={(open) => {
+          setShowScheduledSpaceForm(open);
+          if (!open) setScheduledSpaceEditing(false);
+        }}
       >
         <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col overflow-hidden p-0">
           <div className="shrink-0 px-6 pt-6">
@@ -15064,6 +15120,8 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
             </DialogHeader>
             <ScheduledSpaceStepper
               current={scheduledSpaceStep === "auth" ? 1 : 2}
+              onStepClick={backToScheduledSpacePicker}
+              clickableSteps={scheduledSpaceEditing ? [3] : []}
             />
           </div>
 
@@ -15100,12 +15158,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 onSubmit={handleScheduledSpaceFormSubmit}
                 className="space-y-4"
               >
-                <ReferralCodeField
-                  value={referralInput}
-                  onChange={setReferralInput}
-                  locked={referralLocked}
-                  required={referralRequired}
-                />
+                {!scheduledSpaceEditing && (
+                  <ReferralCodeField
+                    value={referralInput}
+                    onChange={setReferralInput}
+                    locked={referralLocked}
+                    required={referralRequired}
+                  />
+                )}
                 <div>
                   <Label>Full Name *</Label>
                   <Input
@@ -15373,8 +15433,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                   disabled={scheduledSpaceLoading}
                 >
                   {scheduledSpaceLoading
-                    ? "Submitting…"
-                    : "Submit Registration"}
+                    ? scheduledSpaceEditing
+                      ? "Saving…"
+                      : "Submitting…"
+                    : scheduledSpaceEditing
+                      ? "Save & Continue to Time Slots"
+                      : "Submit Registration"}
                 </Button>
               </form>
             )}
@@ -15649,7 +15713,13 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
           <DialogHeader>
             <DialogTitle>Pick a Space & Time Slot</DialogTitle>
           </DialogHeader>
-          <ScheduledSpaceStepper current={3} />
+          <ScheduledSpaceStepper
+            current={3}
+            onStepClick={(step) => {
+              if (step === 2) editScheduledSpaceDetails();
+            }}
+            clickableSteps={[2]}
+          />
           {focusedScheduledSpaceId && (
             <button
               type="button"
