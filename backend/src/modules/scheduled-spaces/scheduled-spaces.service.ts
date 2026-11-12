@@ -16,6 +16,7 @@ import * as QRCode from "qrcode";
 import * as puppeteer from "puppeteer";
 import { RegisterScheduledSpaceDto } from "./dto/register.dto";
 import { SelectSlotsDto } from "./dto/select-slots.dto";
+import { UpdateScheduledSpaceDetailsDto } from "./dto/update-details.dto";
 import { ConfirmScheduledSpacePaymentDto } from "./dto/confirm-payment.dto";
 import { UpdateScheduledSpaceStatusDto } from "./dto/update-status.dto";
 import {
@@ -58,7 +59,7 @@ const TERMINAL_STATUSES = [
   ScheduledSpaceStatusEnum.Cancelled,
   ScheduledSpaceStatusEnum.Rejected,
 ];
-
+
 import { buildCustomAnswers } from "../events/custom-form-fields.util";
 
 @Injectable()
@@ -146,6 +147,46 @@ export class ScheduledSpacesService {
       status: ScheduledSpaceStatusEnum.Confirmed,
       statusHistory: [{ status: ScheduledSpaceStatusEnum.Confirmed }],
     });
+    await request.save();
+    return { success: true, data: omitReferralFields(request) };
+  }
+
+  // Lets the visitor go back from the slot picker to "Your details" and fix
+  // something. Only while the request is still Confirmed (registered, no
+  // slots chosen yet): once slots are held the party size and facility
+  // matter to the reservation, so details are locked from then on.
+  async updateDetails(requestId: string, dto: UpdateScheduledSpaceDetailsDto) {
+    if (!Types.ObjectId.isValid(requestId)) {
+      throw new BadRequestException("Invalid request id");
+    }
+    const request = await this.requestModel.findById(requestId);
+    if (!request) throw new NotFoundException("Request not found");
+    if (request.status !== ScheduledSpaceStatusEnum.Confirmed) {
+      throw new BadRequestException(
+        "Details can only be changed before you pick a time slot.",
+      );
+    }
+    const event = await this.eventModel.findById(request.eventId);
+    if (!event) throw new NotFoundException("Event not found");
+    if (eventHasEnded(event)) {
+      throw new BadRequestException(EVENT_ENDED_MESSAGE);
+    }
+
+    const companions = (dto.companions || [])
+      .map((c) => (c || "").trim())
+      .filter(Boolean);
+    request.name = dto.name.trim();
+    request.phone = dto.phone;
+    request.whatsappNumber = dto.whatsappNumber;
+    request.facilityTypeRequested = dto.facilityTypeRequested;
+    request.purpose = dto.purpose;
+    request.organization = dto.organization;
+    request.customAnswers = buildCustomAnswers(
+      (event.registrationFormFields as any)?.customFields?.scheduledSpace,
+      dto.customAnswers,
+    ) as any;
+    request.companions = companions;
+    request.partySize = 1 + companions.length;
     await request.save();
     return { success: true, data: omitReferralFields(request) };
   }

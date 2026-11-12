@@ -28,6 +28,8 @@ function Stepper({
   current,
   pending = false,
   note,
+  onStepClick,
+  clickableSteps = [],
 }: {
   steps: readonly string[];
   /** 1-based active step. Steps below `current` render as done; pass a value
@@ -38,6 +40,10 @@ function Stepper({
   pending?: boolean;
   /** Banner text when `pending` (defaults to organizer approval). */
   note?: string;
+  /** When given, the steps listed in `clickableSteps` render as buttons so the
+   *  visitor can jump back (or forward) between them. */
+  onStepClick?: (step: number) => void;
+  clickableSteps?: number[];
 }) {
   return (
     <div className="mb-4">
@@ -47,6 +53,9 @@ function Stepper({
           const done = step < current;
           const active = !pending && step === current;
           const isLast = step === steps.length;
+          const clickable =
+            !!onStepClick && step !== current && clickableSteps.includes(step);
+          const Wrapper: any = clickable ? "button" : "div";
           return (
             <li
               key={label}
@@ -60,10 +69,22 @@ function Stepper({
                   }`}
                 />
               )}
+              <Wrapper
+                {...(clickable
+                  ? {
+                      type: "button",
+                      onClick: () => onStepClick?.(step),
+                      title: `Go to ${label}`,
+                    }
+                  : {})}
+                className={`relative z-10 flex flex-col items-center ${
+                  clickable ? "cursor-pointer group" : ""
+                }`}
+              >
               <span
-                className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold transition-colors ${
+                className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold transition-colors ${
                   done
-                    ? "border-blue-500 bg-blue-500 text-white"
+                    ? `border-blue-500 bg-blue-500 text-white ${clickable ? "group-hover:bg-blue-600" : ""}`
                     : active
                       ? "border-blue-500 bg-white text-blue-600"
                       : "border-gray-300 bg-white text-gray-400"
@@ -76,12 +97,13 @@ function Stepper({
                   active
                     ? "font-semibold text-blue-600"
                     : done
-                      ? "text-gray-600"
-                      : "text-gray-400"
+                      ? `text-gray-600 ${clickable ? "group-hover:text-blue-600 group-hover:underline" : ""}`
+                      : `text-gray-400 ${clickable ? "group-hover:text-blue-600" : ""}`
                 }`}
               >
                 {label}
               </span>
+              </Wrapper>
             </li>
           );
         })}
@@ -108,6 +130,8 @@ export function ScheduledSpaceStepper(props: {
   current: number;
   pending?: boolean;
   note?: string;
+  onStepClick?: (step: number) => void;
+  clickableSteps?: number[];
 }) {
   return <Stepper steps={SCHEDULED_SPACE_STEPS} {...props} />;
 }
