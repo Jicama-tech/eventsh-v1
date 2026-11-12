@@ -2,12 +2,12 @@ import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Model, Types } from "mongoose";
-import { ApiKeyGuard } from "../organizers/guards/api-key.guard";
+import { ComboxKeyGuard } from "./combox-key.guard";
 
 // Everything here is scoped to the organizer the API key belongs to
 // (ApiKeyGuard resolves req.organizerId from the key, never from the caller).
 @Controller("combox-integration")
-@UseGuards(ApiKeyGuard, ThrottlerGuard)
+@UseGuards(ComboxKeyGuard, ThrottlerGuard)
 export class ComboxIntegrationController {
   constructor(
     @InjectModel("Event") private readonly eventModel: Model<any>,
