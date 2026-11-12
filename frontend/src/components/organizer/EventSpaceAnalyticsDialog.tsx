@@ -30,6 +30,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
+import { ScheduledSpaceAnalytics } from "./ScheduledSpaceAnalytics";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import {
@@ -114,6 +115,7 @@ export function EventSpaceAnalyticsDialog({
   const [detail, setDetail] = useState<any>(null); // full event doc
   const [stalls, setStalls] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<"spaces" | "scheduled">("spaces");
   const [stallForDetail, setStallForDetail] = useState<any>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const { country } = useCountry();
@@ -745,7 +747,17 @@ export function EventSpaceAnalyticsDialog({
     doc.save(`${safeName}_Space_Analytics_${stamp}.pdf`);
   };
 
-  const canExport = !loading && !error && templates.length > 0;
+  const hasScheduled =
+    Array.isArray(detail?.venueScheduledSpaces) &&
+    detail.venueScheduledSpaces.length > 0;
+  const showScheduled = hasScheduled && view === "scheduled";
+  // An event with only Scheduled Spaces (no sellable templates) opens
+  // straight on that view instead of an empty Spaces list.
+  useEffect(() => {
+    if (hasScheduled && templates.length === 0) setView("scheduled");
+  }, [hasScheduled, templates.length]);
+
+  const canExport = !loading && !error && templates.length > 0 && !showScheduled;
 
   return (
     <>
@@ -766,7 +778,7 @@ export function EventSpaceAnalyticsDialog({
                 <LayoutGrid className="h-5 w-5 text-primary" />
               )}
               <span className="flex-1">
-                {selected
+                {selected && !showScheduled
                   ? selected.name
                   : `Space Analytics — ${eventTitle}`}
               </span>
@@ -790,13 +802,41 @@ export function EventSpaceAnalyticsDialog({
               )}
             </DialogTitle>
             <DialogDescription>
-              {selected
-                ? "Booking breakdown for this space template."
-                : "Sellable space templates created for this event. Select one to see bookings."}
+              {showScheduled
+                ? "Time-slot availability and bookings for the Scheduled Spaces in this event."
+                : selected
+                  ? "Booking breakdown for this space template."
+                  : "Sellable space templates created for this event. Select one to see bookings."}
             </DialogDescription>
           </DialogHeader>
 
-          {loading ? (
+          {hasScheduled && !selected && (
+            <div className="inline-flex w-fit rounded-lg border bg-muted/40 p-0.5 text-sm">
+              {(
+                [
+                  ["spaces", "Spaces"],
+                  ["scheduled", "Scheduled Spaces"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setView(key)}
+                  className={`rounded-md px-3 py-1 font-medium transition ${
+                    view === key
+                      ? "bg-background shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {showScheduled ? (
+            <ScheduledSpaceAnalytics eventId={eventId} eventTitle={eventTitle} />
+          ) : loading ? (
             <div className="py-16 text-center text-muted-foreground">
               <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
               Loading analytics…

@@ -94,6 +94,11 @@ export class ScheduledSpacesController {
     );
   }
 
+  @Get("analytics/:eventId")
+  async getAnalytics(@Param("eventId") eventId: string) {
+    return await this.scheduledSpacesService.getAnalytics(eventId);
+  }
+
   @Get("available/:eventId")
   async getAvailableSpaces(@Param("eventId") eventId: string) {
     return await this.scheduledSpacesService.getAvailableSpaces(eventId);
