@@ -2542,7 +2542,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       toast({
         duration: 5000,
         title: "Too many people",
-        description: `This space allows at most ${scheduledSpaceMaxPersons} person${scheduledSpaceMaxPersons === 1 ? "" : "s"} per booking, including you.`,
+        description: `Per slot capacity is ${scheduledSpaceMaxPersons}. For more people, please make another booking. Thank you!`,
         variant: "destructive",
       });
       return;
@@ -15455,6 +15455,14 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                       >
                         <Plus className="h-4 w-4 mr-1" /> Add Person
                       </Button>
+                      {!!scheduledSpaceMaxPersons &&
+                        1 + scheduledSpaceForm.companions.length >=
+                          scheduledSpaceMaxPersons && (
+                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                            Per slot capacity is {scheduledSpaceMaxPersons}. For
+                            more people, please make another booking. Thank you!
+                          </p>
+                        )}
                     </div>
                   </div>
                 )}
