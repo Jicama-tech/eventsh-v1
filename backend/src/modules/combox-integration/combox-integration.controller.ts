@@ -1,8 +1,9 @@
-import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, NotFoundException, Param, Query, Req, UseGuards } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Model, Types } from "mongoose";
 import { ComboxKeyGuard } from "./combox-key.guard";
+import { ComboxFeedService, FEED_SECTIONS, FeedSection } from "./combox-feed.service";
 
 // Everything here is scoped to the organizer the API key belongs to
 // (ApiKeyGuard resolves req.organizerId from the key, never from the caller).
@@ -12,6 +13,7 @@ export class ComboxIntegrationController {
   constructor(
     @InjectModel("Event") private readonly eventModel: Model<any>,
     @InjectModel("Ticket") private readonly ticketModel: Model<any>,
+    private readonly feed: ComboxFeedService,
   ) {}
 
   /** Cheap check that the key works; returns the organizer id it is locked to. */
@@ -70,10 +72,38 @@ export class ComboxIntegrationController {
         totalTickets: e.totalTickets ?? null,
         visibility: e.visibility ?? null,
         tags: e.tags ?? [],
+        status: e.status ?? null,
+        published: e.published !== false,
         ticketsSold: soldBy.get(String(e._id))?.tickets ?? 0,
         revenue: soldBy.get(String(e._id))?.revenue ?? 0,
       })),
     };
+  }
+
+  /** Who the organizer is and the currency their figures are in. */
+  @Get("organizer")
+  organizer(@Req() req: any) {
+    return this.feed.organizerInfo(req.organizerId);
+  }
+
+  /** Profit and loss of every event (eventsh's own calculation). */
+  @Get("pnl")
+  pnl(@Req() req: any) {
+    return this.feed.organizerPnl(req.organizerId);
+  }
+
+  @Get("events/:id")
+  eventDetail(@Req() req: any, @Param("id") id: string) {
+    return this.feed.eventDetail(req.organizerId, id);
+  }
+
+  /** One part of an event as a table: tickets, exhibitors, speakers, sponsors, workshops, ... */
+  @Get("events/:id/:section")
+  section(@Req() req: any, @Param("id") id: string, @Param("section") section: string) {
+    if (!(FEED_SECTIONS as readonly string[]).includes(section)) {
+      throw new NotFoundException("Unknown section");
+    }
+    return this.feed.section(req.organizerId, id, section as FeedSection);
   }
 
   /**
