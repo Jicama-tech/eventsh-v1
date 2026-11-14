@@ -121,7 +121,7 @@ export class ComboxFeedService {
         this.rsvpModel.countDocuments(by),
         this.feedbackModel.aggregate([{ $match: { eventId: new Types.ObjectId(eventId) } }, { $group: { _id: null, count: { $sum: 1 }, average: { $avg: "$rating" } } }]).exec(),
         this.expenseModel.countDocuments(by),
-        this.scheduledModel.countDocuments(by),
+        this.scheduledModel.countDocuments({ eventId: new Types.ObjectId(eventId) }),   // a filter of its own: the shared one is rewritten as the models above cast it
       ]);
 
     const t = tickets[0];
