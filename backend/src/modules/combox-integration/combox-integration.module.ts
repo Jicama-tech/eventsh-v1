@@ -24,6 +24,7 @@ import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-
 import { RsvpSchema } from "../rsvp/schemas/rsvp.schema";
 import { FeedbackSchema } from "../feedback/schemas/feedback.schema";
 import { EventExpenseSchema } from "../expenses/entities/event-expense.entity";
+import { ScheduledSpaceRequestSchema } from "../scheduled-spaces/entities/scheduled-space-request.entity";
 import { ComboxKeyService } from "./combox-key.service";
 import { ComboxKeyGuard } from "./combox-key.guard";
 import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
@@ -52,6 +53,7 @@ import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
       { name: "WorkshopRequest", schema: WorkshopRequestSchema },
       { name: "WorkshopBooking", schema: WorkshopBookingSchema },
       { name: "RoundTableBooking", schema: RoundTableBookingSchema },
+      { name: "ScheduledSpaceRequest", schema: ScheduledSpaceRequestSchema },
       { name: "Rsvp", schema: RsvpSchema },
       { name: "Feedback", schema: FeedbackSchema },
       { name: "EventExpense", schema: EventExpenseSchema },

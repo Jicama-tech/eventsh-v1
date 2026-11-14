@@ -18,6 +18,7 @@ export const FEED_SECTIONS = [
   "workshops",
   "workshop-hosts",
   "roundtables",
+  "scheduled-spaces",
   "rsvp",
   "feedback",
   "expenses",
@@ -45,6 +46,7 @@ export class ComboxFeedService {
     @InjectModel("WorkshopBooking") private readonly workshopBookingModel: Model<any>,
     @InjectModel("RoundTableBooking") private readonly roundTableModel: Model<any>,
     @InjectModel("Rsvp") private readonly rsvpModel: Model<any>,
+    @InjectModel("ScheduledSpaceRequest") private readonly scheduledModel: Model<any>,
     @InjectModel("Feedback") private readonly feedbackModel: Model<any>,
     @InjectModel("EventExpense") private readonly expenseModel: Model<any>,
     private readonly analytics: AnalyticsService,
@@ -102,7 +104,7 @@ export class ComboxFeedService {
     const org = await this.organizer(organizerId);
     const by = this.byEvent(eventId);
 
-    const [tickets, exhibitors, speakers, sponsors, workshops, roundtables, rsvp, feedback, expenses] =
+    const [tickets, exhibitors, speakers, sponsors, workshops, roundtables, rsvp, feedback, expenses, scheduledSpaces] =
       await Promise.all([
         this.ticketModel
           .aggregate([
@@ -119,6 +121,7 @@ export class ComboxFeedService {
         this.rsvpModel.countDocuments(by),
         this.feedbackModel.aggregate([{ $match: { eventId: new Types.ObjectId(eventId) } }, { $group: { _id: null, count: { $sum: 1 }, average: { $avg: "$rating" } } }]).exec(),
         this.expenseModel.countDocuments(by),
+        this.scheduledModel.countDocuments(by),
       ]);
 
     const t = tickets[0];
@@ -164,6 +167,7 @@ export class ComboxFeedService {
         sponsors,
         workshops,
         roundtables,
+        scheduledSpaces,
         rsvp,
         feedback: f?.count ?? 0,
         feedbackAverage: f?.average ? Math.round(f.average * 10) / 10 : null,
@@ -393,6 +397,39 @@ export class ComboxFeedService {
             payment: b.paymentStatus ?? null,
             checkedIn: !!b.hasCheckedIn,
             canApprove: awaitingApproval("roundtables", b),
+          })),
+        };
+      }
+
+      case "scheduled-spaces": {
+        const rows: any[] = await this.scheduledModel.find(by).sort({ createdAt: -1 }).limit(MAX_ROWS).lean();
+        return {
+          columns: [
+            { key: "name", label: "Name" },
+            { key: "email", label: "Email" },
+            { key: "phone", label: "Phone" },
+            { key: "facility", label: "Space" },
+            { key: "slots", label: "Slots" },
+            { key: "people", label: "People", format: "number" },
+            { key: "total", label: "Total", format: "money" },
+            { key: "paid", label: "Paid", format: "money" },
+            { key: "payment", label: "Payment", format: "status" },
+            { key: "status", label: "Status", format: "status" },
+            { key: "checkedIn", label: "Checked in", format: "bool" },
+          ],
+          rows: rows.map((r) => ({
+            id: String(r._id),
+            name: r.name ?? null,
+            email: r.email ?? null,
+            phone: r.phone || r.whatsappNumber || null,
+            facility: r.facilityTypeRequested || [...new Set((r.selectedSlots || []).map((s: any) => s.spaceName))].join(", ") || null,
+            slots: (r.selectedSlots || []).map((s: any) => `${s.date} ${s.startTime}-${s.endTime}`).join("; "),
+            people: r.partySize ?? 1,
+            total: r.slotsTotal ?? 0,
+            paid: r.paidAmount ?? 0,
+            payment: r.paymentStatus ?? null,
+            status: r.status ?? null,
+            checkedIn: !!r.hasCheckedIn,
           })),
         };
       }
