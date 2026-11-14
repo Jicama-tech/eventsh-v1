@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { AnalyticsService } from "../analytics/analytics.service";
+import { awaitingApproval } from "./combox-payments.service";
 
 export type FeedColumn = {
   key: string;
@@ -73,7 +74,7 @@ export class ComboxFeedService {
   private async ownEvent(organizerId: string, eventId: string) {
     if (!Types.ObjectId.isValid(eventId)) throw new NotFoundException("Event not found");
     const event: any = await this.eventModel
-      .findOne({ _id: eventId, organizer: new Types.ObjectId(organizerId) })
+      .findOne({ _id: eventId, organizer: { $in: [organizerId, new Types.ObjectId(organizerId)] } })
       .select(
         "title description slug eventType category startDate time endDate endTime location address ticketPrice totalTickets visibility status published tags visitorTypes image",
       )
@@ -251,6 +252,7 @@ export class ComboxFeedService {
               status: s.status,
               checkedIn: !!s.hasCheckedIn,
               requested: s.requestDate ?? s.createdAt,
+              canApprove: awaitingApproval("exhibitors", s),
             };
           }),
         };
@@ -279,6 +281,7 @@ export class ComboxFeedService {
             payment: s.isCharged ? s.paymentStatus : null,
             status: s.status,
             checkedIn: !!s.hasCheckedIn,
+            canApprove: awaitingApproval("speakers", s),
           })),
         };
       }
@@ -306,6 +309,7 @@ export class ComboxFeedService {
             verified: !!s.paymentVerified,
             status: s.status,
             submitted: s.submittedAt ?? s.createdAt,
+            canApprove: awaitingApproval("sponsors", s),
           })),
         };
       }
@@ -335,6 +339,7 @@ export class ComboxFeedService {
             payment: b.paymentStatus ?? null,
             checkedIn: !!b.hasCheckedIn,
             booked: b.createdAt,
+            canApprove: awaitingApproval("workshops", b),
           })),
         };
       }
@@ -387,6 +392,7 @@ export class ComboxFeedService {
             amount: b.amount ?? 0,
             payment: b.paymentStatus ?? null,
             checkedIn: !!b.hasCheckedIn,
+            canApprove: awaitingApproval("roundtables", b),
           })),
         };
       }

@@ -1,9 +1,10 @@
-import { Controller, Get, NotFoundException, Param, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Model, Types } from "mongoose";
 import { ComboxKeyGuard } from "./combox-key.guard";
 import { ComboxFeedService, FEED_SECTIONS, FeedSection } from "./combox-feed.service";
+import { ComboxPaymentsService } from "./combox-payments.service";
 
 // Everything here is scoped to the organizer the API key belongs to
 // (ApiKeyGuard resolves req.organizerId from the key, never from the caller).
@@ -14,6 +15,7 @@ export class ComboxIntegrationController {
     @InjectModel("Event") private readonly eventModel: Model<any>,
     @InjectModel("Ticket") private readonly ticketModel: Model<any>,
     private readonly feed: ComboxFeedService,
+    private readonly payments: ComboxPaymentsService,
   ) {}
 
   /** Cheap check that the key works; returns the organizer id it is locked to. */
@@ -26,7 +28,7 @@ export class ComboxIntegrationController {
   async events(@Req() req: any) {
     const organizer = new Types.ObjectId(req.organizerId);
     const events = await this.eventModel
-      .find({ organizer })
+      .find({ organizer: { $in: [req.organizerId, organizer] } }) // stored as text on older events, as an ObjectId on newer ones
       .select(
         "title description slug eventType startDate time endDate endTime location address ticketPrice totalTickets visibility tags status published",
       )
@@ -39,7 +41,7 @@ export class ComboxIntegrationController {
       .aggregate([
         {
           $match: {
-            organizerId: organizer,
+            organizerId: { $in: [req.organizerId, organizer] },
             status: { $in: ["confirmed", "used"] },
           },
         },
@@ -107,6 +109,21 @@ export class ComboxIntegrationController {
   }
 
   /**
+   * Approve a payment that is waiting for the organizer (exhibitor, speaker, sponsor, workshop or round-table
+   * booking). Runs the same confirmation eventsh runs from its own dashboard.
+   */
+  @Post("payments/:section/:id/approve")
+  @HttpCode(200)
+  approvePayment(
+    @Req() req: any,
+    @Param("section") section: string,
+    @Param("id") id: string,
+    @Body() body: { notes?: string },
+  ) {
+    return this.payments.approve(req.organizerId, section, id, body?.notes);
+  }
+
+  /**
    * Confirmed ticket buyers, oldest change first so ComBox can page through
    * with `since` (an ISO date) = the last updatedAt it has seen.
    */
@@ -118,7 +135,7 @@ export class ComboxIntegrationController {
     @Query("limit") limit?: string,
   ) {
     const filter: any = {
-      organizerId: new Types.ObjectId(req.organizerId),
+      organizerId: { $in: [req.organizerId, new Types.ObjectId(req.organizerId)] },
       status: { $in: ["confirmed", "used"] },
     };
     if (since && !isNaN(Date.parse(since))) {
