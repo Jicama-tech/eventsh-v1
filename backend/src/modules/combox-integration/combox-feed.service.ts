@@ -533,4 +533,133 @@ export class ComboxFeedService {
       }
     }
   }
+
+  // ---- one row in full (the View dialog) -----------------------------------
+
+  /** Everything Eventsh holds about one exhibitor, speaker or visitor, as groups of fields and a timeline. */
+  async rowDetail(organizerId: string, eventId: string, section: string, rowId: string) {
+    await this.ownEvent(organizerId, eventId);
+    if (!Types.ObjectId.isValid(rowId)) throw new NotFoundException("Not found");
+    const org = await this.organizer(organizerId);
+    const by = this.byEvent(eventId);
+    type F = { label: string; value: any; format?: "money" | "date" | "status" | "bool" | "text" };
+    const keep = (fs: F[]) => fs.filter((f) => f.value !== null && f.value !== undefined && f.value !== "" && !(Array.isArray(f.value) && !f.value.length));
+    const timeline: { label: string; at: any; by?: string; note?: string }[] = [];
+    const mark = (label: string, at: any, byWho?: string, note?: string) => at && timeline.push({ label, at, by: byWho, note });
+    const history = (h: any[]) => (h || []).forEach((x) => mark(`Status: ${x.status}`, x.changedAt, x.changedBy, x.note));
+    const sorted = () => timeline.sort((a, b) => +new Date(a.at) - +new Date(b.at));
+
+    if (section === "exhibitors") {
+      const s: any = await this.stallModel.findOne({ _id: rowId, ...by }).lean();
+      if (!s) throw new NotFoundException("Not found");
+      const v: any = s.shopkeeperId && Types.ObjectId.isValid(String(s.shopkeeperId)) ? await this.vendorModel.findById(s.shopkeeperId).lean() : {};
+      mark("Request submitted", s.requestDate ?? s.createdAt);
+      mark("Request confirmed", s.confirmationDate);
+      mark("Tables selected", s.selectionDate);
+      mark("Payment submitted", s.paymentSubmittedAt);
+      mark("Payment received", s.paymentConfirmedDate ?? s.paymentDate);
+      mark("Booking completed", s.completionDate);
+      mark("Checked in", s.checkInTime);
+      mark("Checked out", s.checkOutTime);
+      mark("Deposit returned", s.depositReturnedDate);
+      history(s.statusHistory);
+      return {
+        currency: org.currency,
+        title: s.brandName || s.displayName || v?.businessName || v?.name || "Exhibitor",
+        subtitle: s.nameOfApplicant || v?.name || null,
+        status: s.status,
+        groups: [
+          { title: "Booking", fields: keep([
+            { label: "Status", value: s.status, format: "status" }, { label: "Payment", value: s.paymentStatus, format: "status" },
+            { label: "Tables", value: (s.selectedTables || []).map((t: any) => t.name || t.tableName).filter(Boolean).join(", ") },
+            { label: "Add-ons", value: (s.selectedAddOns || []).map((a: any) => `${a.name} × ${a.quantity}`).join(", ") },
+            { label: "Operators", value: s.noOfOperators },
+            { label: "Tables total", value: s.tablesTotal, format: "money" }, { label: "Add-ons total", value: s.addOnsTotal, format: "money" },
+            { label: "Deposit", value: s.depositTotal, format: "money" }, { label: "Grand total", value: s.grandTotal, format: "money" },
+            { label: "Paid", value: s.paymentStatus === "Paid" ? s.grandTotal : s.paidAmount, format: "money" }, { label: "Remaining", value: s.remainingAmount, format: "money" },
+            { label: "Payment method", value: s.paymentMethod }, { label: "Transaction ID", value: s.transactionId },
+            { label: "Coupon", value: s.couponCodeApplied || s.couponCodeAssigned },
+            { label: "Deposit returned", value: s.depositReturned ? true : null, format: "bool" },
+            { label: "Checked in", value: !!s.hasCheckedIn, format: "bool" }, { label: "Checked out", value: !!s.hasCheckedOut, format: "bool" },
+            { label: "Cancellation reason", value: s.cancellationReason }, { label: "Referred by", value: s.referralOperatorName || s.referralAgentName },
+          ]) },
+          { title: "Exhibitor", fields: keep([
+            { label: "Brand", value: s.brandName }, { label: "Display name", value: s.displayName }, { label: "Applicant", value: s.nameOfApplicant || v?.name },
+            { label: "Email", value: v?.businessEmail || v?.email }, { label: "Phone", value: v?.whatsAppNumber || v?.whatsappNumber || v?.phoneNumber || v?.phone },
+            { label: "Business", value: v?.businessName }, { label: "Business type", value: v?.businessType }, { label: "Category", value: v?.businessCategory },
+            { label: "Address", value: [v?.address, v?.city, v?.state, v?.pincode, v?.country].filter(Boolean).join(", ") },
+            { label: "Registration number", value: s.registrationNumber }, { label: "Residency", value: s.residency }, { label: "Nationality", value: s.businessOwnerNationality },
+            { label: "Product", value: s.productDescription }, { label: "Facebook", value: s.faceBookLink || v?.faceBookLink }, { label: "Instagram", value: s.instagramLink || v?.instagramLink },
+            { label: "Notes", value: s.notes },
+          ]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+      };
+    }
+
+    if (section === "speakers") {
+      const s: any = await this.speakerModel.findOne({ _id: rowId, ...by }).lean();
+      if (!s) throw new NotFoundException("Not found");
+      mark("Applied", s.createdAt);
+      mark("Approved", s.confirmationDate);
+      mark("Rejected", s.rejectionDate);
+      mark("Paid", s.paymentDate);
+      mark("Checked in", s.checkInTime);
+      mark("Checked out", s.checkOutTime);
+      history(s.statusHistory);
+      return {
+        currency: org.currency,
+        title: s.name || "Speaker",
+        subtitle: [s.title, s.organization].filter(Boolean).join(", ") || null,
+        status: s.status,
+        groups: [
+          { title: "Speaker", fields: keep([
+            { label: "Status", value: s.status, format: "status" }, { label: "Keynote", value: s.isKeynote ? true : null, format: "bool" },
+            { label: "Email", value: s.email }, { label: "Phone", value: s.phone }, { label: "Expertise", value: s.expertise }, { label: "Bio", value: s.bio },
+            { label: "LinkedIn", value: s.socialLinks?.linkedin }, { label: "Twitter", value: s.socialLinks?.twitter }, { label: "Website", value: s.socialLinks?.website },
+            { label: "Previous speaking", value: s.previousSpeakingExperience }, { label: "Equipment needed", value: s.equipmentNeeded },
+            { label: "Applicant notes", value: s.notes }, { label: "Organizer notes", value: s.organizerNotes },
+            { label: "Fee", value: s.isCharged ? s.fee : null, format: "money" }, { label: "Payment", value: s.isCharged ? s.paymentStatus : null, format: "status" },
+            { label: "Added by", value: s.source }, { label: "Referred by", value: s.referralOperatorName || s.referralAgentName },
+            { label: "Checked in", value: !!s.hasCheckedIn, format: "bool" },
+          ]) },
+          ...(s.sessions || []).map((x: any, i: number) => ({ title: `Session ${i + 1}`, fields: keep([
+            { label: "Topic", value: x.topic }, { label: "Description", value: x.description }, { label: "Status", value: x.status, format: "status" },
+            { label: "Requested time", value: [x.preferredStartTime, x.preferredEndTime].filter(Boolean).join(" – ") },
+            { label: "Confirmed time", value: [x.confirmedStartTime, x.confirmedEndTime].filter(Boolean).join(" – ") }, { label: "Duration (min)", value: x.duration },
+          ]) })),
+        ].filter((g: any) => g.fields.length),
+        timeline: sorted(),
+      };
+    }
+
+    if (section === "tickets") {
+      const t: any = await this.ticketModel.findOne({ _id: rowId, ...by }).lean();
+      if (!t) throw new NotFoundException("Not found");
+      mark("Ticket bought", t.purchaseDate ?? t.createdAt);
+      mark("Checked in", t.usedAt);
+      return {
+        currency: org.currency,
+        title: t.customerName || "Visitor",
+        subtitle: t.ticketId || null,
+        status: t.status,
+        groups: [
+          { title: "Ticket", fields: keep([
+            { label: "Status", value: t.status, format: "status" }, { label: "Ticket ID", value: t.ticketId },
+            { label: "Tickets", value: (t.ticketDetails || []).map((d: any) => `${d.ticketType} × ${d.quantity} @ ${d.price}`).join(", ") },
+            { label: "Total", value: t.totalAmount, format: "money" }, { label: "Payment confirmed", value: t.paymentConfirmed, format: "bool" },
+            { label: "Coupon", value: t.coupon }, { label: "Checked in", value: !!(t.isUsed || t.attendance), format: "bool" },
+            { label: "Referred by", value: t.referralOperatorName || t.referralAgentName }, { label: "Notes", value: t.notes },
+          ]) },
+          { title: "Visitor", fields: keep([
+            { label: "Name", value: t.customerName }, { label: "Email", value: t.customerEmail }, { label: "WhatsApp", value: t.customerWhatsapp },
+            { label: "Emergency contact", value: t.customerEmergencyContact },
+          ]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+      };
+    }
+
+    throw new NotFoundException("Not found");
+  }
 }

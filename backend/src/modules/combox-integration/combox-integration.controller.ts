@@ -125,6 +125,12 @@ export class ComboxIntegrationController {
     return this.payments.approve(req.organizerId, section, id, body?.notes);
   }
 
+  /** One exhibitor, speaker or visitor in full: every field and the timeline (the View dialog). */
+  @Get("events/:id/:section/:rowId")
+  rowDetail(@Req() req: any, @Param("id") id: string, @Param("section") section: string, @Param("rowId") rowId: string) {
+    return this.feed.rowDetail(req.organizerId, id, section, rowId);
+  }
+
   /** Send the ticket again to every confirmed exhibitor of an event. */
   @Post("events/:id/bulk-send-tickets")
   @HttpCode(200)
