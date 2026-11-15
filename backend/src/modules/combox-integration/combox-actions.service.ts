@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
+import * as fs from "fs";
 import { StallsService } from "../stalls/stalls.service";
 import { SpeakerRequestsService } from "../speaker-requests/speaker-requests.service";
 import { TicketsService } from "../tickets/tickets.service";
@@ -124,6 +125,25 @@ export class ComboxActionsService {
         return this.stalls.manualStallAttendance(id, "CHECK_IN");
       case "check-out":
         return this.stalls.manualStallAttendance(id, "CHECK_OUT");
+    }
+  }
+
+  /** Saves a payment proof on an exhibitor's booking (the file is already stored; it is removed again if the booking is not the organizer's). */
+  async paymentProof(organizerId: string, id: string, transactionId: string | undefined, file?: { path: string; filename: string }) {
+    const drop = () => file?.path && fs.unlink(file.path, () => undefined);
+    try {
+      if (!Types.ObjectId.isValid(id)) throw new NotFoundException("Not found");
+      const txn = transactionId?.trim().slice(0, 100);
+      if (!txn && !file) throw new BadRequestException("Add a transaction ID or a screenshot.");
+      const doc: any = await this.stallModel.findById(id).select("eventId").lean();
+      if (!doc) throw new NotFoundException("Not found");
+      await this.ownsEvent(organizerId, doc.eventId);
+      const saved: any = await this.stalls.updateTransactionDetails(id, txn || undefined, file ? `/uploads/stalls/${file.filename}` : undefined);
+
+      return { ok: true, transactionId: saved?.transactionId ?? null, transactionScreenshot: saved?.transactionScreenshot ?? null };
+    } catch (e) {
+      drop();
+      throw e;
     }
   }
 

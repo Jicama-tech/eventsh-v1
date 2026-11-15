@@ -1,4 +1,8 @@
-import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { diskStorage } from "multer";
+import { v4 as uuidv4 } from "uuid";
+import * as path from "path";
 import { InjectModel } from "@nestjs/mongoose";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Model, Types } from "mongoose";
@@ -6,6 +10,11 @@ import { ComboxKeyGuard } from "./combox-key.guard";
 import { ComboxFeedService, FEED_SECTIONS, FeedSection } from "./combox-feed.service";
 import { ComboxPaymentsService } from "./combox-payments.service";
 import { ComboxActionsService } from "./combox-actions.service";
+
+// A payment proof is kept with the other stall uploads, under a name of its own
+const proofName = (_req: any, file: any, cb: any) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+const proofImage = (_req: any, file: any, cb: any) =>
+  /\/(jpg|jpeg|png|gif|webp)$/.test(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Only image files are allowed."), false);
 
 // Everything here is scoped to the organizer the API key belongs to
 // (ApiKeyGuard resolves req.organizerId from the key, never from the caller).
@@ -123,6 +132,14 @@ export class ComboxIntegrationController {
     @Body() body: { notes?: string },
   ) {
     return this.payments.approve(req.organizerId, section, id, body?.notes);
+  }
+
+  /** The proof of an exhibitor's payment (a transaction ID and/or a screenshot), saved on the booking as Eventsh does. */
+  @Post("exhibitors/:rowId/payment-proof")
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor("screenshot", { storage: diskStorage({ destination: "./uploads/stalls", filename: proofName }), fileFilter: proofImage, limits: { fileSize: 5 * 1024 * 1024 } }))
+  paymentProof(@Req() req: any, @Param("rowId") rowId: string, @UploadedFile() file: any, @Body() body: any) {
+    return this.actions.paymentProof(req.organizerId, rowId, typeof body?.transactionId === "string" ? body.transactionId : undefined, file);
   }
 
   /** An exhibitor's ticket as a PDF. */
