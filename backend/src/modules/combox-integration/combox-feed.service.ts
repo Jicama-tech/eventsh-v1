@@ -124,6 +124,8 @@ export class ComboxFeedService {
         this.scheduledModel.countDocuments({ eventId: new Types.ObjectId(eventId) }),   // a filter of its own: the shared one is rewritten as the models above cast it
       ]);
 
+    // the number of rows each table lists (ComBox's Participants total adds these up, so it matches the tables)
+    const [ticketRows, workshopHosts] = await Promise.all([this.ticketModel.countDocuments(by), this.workshopRequestModel.countDocuments(by)]);
     const t = tickets[0];
     const f = feedback[0];
     let pnl: any = null;
@@ -161,6 +163,8 @@ export class ComboxFeedService {
       counts: {
         tickets: t?.quantity ?? 0,
         ticketOrders: t?.orders?.length ?? 0,
+        ticketRows,
+        workshopHosts,
         checkedIn: t?.checkedIn ?? 0,
         exhibitors,
         speakers,
@@ -260,6 +264,7 @@ export class ComboxFeedService {
               // what decides which organizer actions ComBox offers on the row
               deposit: s.depositTotal ?? 0,
               depositReturned: !!s.depositReturned,
+              checkedOut: !!s.hasCheckedOut,
               amendmentPending: !!s.pendingAmendment,
               cancellationRequested: !!s.pendingCancellation,
               cancellationReason: s.pendingCancellation?.reason ?? null,
