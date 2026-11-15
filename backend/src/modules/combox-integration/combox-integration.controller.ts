@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Model, Types } from "mongoose";
@@ -123,6 +123,14 @@ export class ComboxIntegrationController {
     @Body() body: { notes?: string },
   ) {
     return this.payments.approve(req.organizerId, section, id, body?.notes);
+  }
+
+  /** An exhibitor's ticket as a PDF. */
+  @Get("exhibitors/:rowId/ticket")
+  async exhibitorTicket(@Req() req: any, @Param("rowId") rowId: string, @Res() res: any) {
+    const { buffer, filename } = await this.actions.exhibitorTicket(req.organizerId, rowId);
+    res.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${filename}"`, "Content-Length": buffer.length.toString() });
+    res.end(buffer);
   }
 
   /** One exhibitor, speaker or visitor in full: every field and the timeline (the View dialog). */

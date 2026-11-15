@@ -10,7 +10,7 @@ import { ScheduledSpacesService } from "../scheduled-spaces/scheduled-spaces.ser
 
 /** What ComBox may do to a row of each part of an event (the rest of the part stays read-only there). */
 export const ACTIONS: Record<string, string[]> = {
-  exhibitors: ["confirm", "cancel", "delete", "restore", "payment-status", "confirm-amendment", "cancellation", "return-deposit", "resend-ticket"],
+  exhibitors: ["confirm", "cancel", "delete", "restore", "payment-status", "confirm-amendment", "cancellation", "return-deposit", "resend-ticket", "check-in", "check-out"],
   speakers: ["status"],
   tickets: ["resend-email", "mark-attendance"],
   sponsors: ["status"],
@@ -120,7 +120,20 @@ export class ComboxActionsService {
         return this.stalls.returnedDeposit(id, notes || "", BY);
       case "resend-ticket":
         return this.stalls.resendStallTicket(id);
+      case "check-in":
+        return this.stalls.manualStallAttendance(id, "CHECK_IN");
+      case "check-out":
+        return this.stalls.manualStallAttendance(id, "CHECK_OUT");
     }
+  }
+
+  /** The exhibitor's ticket as a PDF (what Eventsh's own Download ticket gives). */
+  async exhibitorTicket(organizerId: string, id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException("Not found");
+    const doc: any = await this.stallModel.findById(id).select("eventId").lean();
+    if (!doc) throw new NotFoundException("Not found");
+    await this.ownsEvent(organizerId, doc.eventId);
+    return this.stalls.downloadStallTicket(id);
   }
 
   /** Send the ticket again to every confirmed exhibitor of an event, with the organizer's note. */
