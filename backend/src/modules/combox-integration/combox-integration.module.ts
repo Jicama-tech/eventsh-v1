@@ -11,6 +11,8 @@ import { ComboxFeedService } from "./combox-feed.service";
 import { ComboxPaymentsService } from "./combox-payments.service";
 import { ComboxActionsService } from "./combox-actions.service";
 import { TicketsModule } from "../tickets/tickets.module";
+import { WorkshopRequestsModule } from "../workshop-requests/workshop-requests.module";
+import { ScheduledSpacesModule } from "../scheduled-spaces/scheduled-spaces.module";
 import { StallsModule } from "../stalls/stalls.module";
 import { SpeakerRequestsModule } from "../speaker-requests/speaker-requests.module";
 import { SponsorsModule } from "../sponsors/sponsors.module";
@@ -45,6 +47,8 @@ import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
     forwardRef(() => RoundTableBookingsModule),
     forwardRef(() => WorkshopBookingsModule),
     forwardRef(() => TicketsModule),
+    forwardRef(() => WorkshopRequestsModule),
+    forwardRef(() => ScheduledSpacesModule),
     MongooseModule.forFeature([
       { name: "Event", schema: EventSchema },
       { name: "Ticket", schema: TicketSchema },
