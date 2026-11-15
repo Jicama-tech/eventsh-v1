@@ -550,7 +550,7 @@ export class ComboxFeedService {
     if (!Types.ObjectId.isValid(rowId)) throw new NotFoundException("Not found");
     const org = await this.organizer(organizerId);
     const by = this.byEvent(eventId);
-    type F = { label: string; value: any; format?: "money" | "date" | "status" | "bool" | "text" };
+    type F = { label: string; value: any; format?: "money" | "date" | "status" | "bool" | "text" | "link" };
     const keep = (fs: F[]) => fs.filter((f) => f.value !== null && f.value !== undefined && f.value !== "" && !(Array.isArray(f.value) && !f.value.length));
     const timeline: { label: string; at: any; by?: string; note?: string }[] = [];
     const mark = (label: string, at: any, byWho?: string, note?: string) => at && timeline.push({ label, at, by: byWho, note });
@@ -585,7 +585,7 @@ export class ComboxFeedService {
             { label: "Tables total", value: s.tablesTotal, format: "money" }, { label: "Add-ons total", value: s.addOnsTotal, format: "money" },
             { label: "Deposit", value: s.depositTotal, format: "money" }, { label: "Grand total", value: s.grandTotal, format: "money" },
             { label: "Paid", value: s.paymentStatus === "Paid" ? s.grandTotal : s.paidAmount, format: "money" }, { label: "Remaining", value: s.remainingAmount, format: "money" },
-            { label: "Payment method", value: s.paymentMethod }, { label: "Transaction ID", value: s.transactionId },
+            { label: "Payment method", value: s.paymentMethod }, { label: "Transaction ID", value: s.transactionId }, { label: "Payment proof", value: s.transactionScreenshot, format: "link" },
             { label: "Coupon", value: s.couponCodeApplied || s.couponCodeAssigned },
             { label: "Deposit returned", value: s.depositReturned ? true : null, format: "bool" },
             { label: "Checked in", value: !!s.hasCheckedIn, format: "bool" }, { label: "Checked out", value: !!s.hasCheckedOut, format: "bool" },
