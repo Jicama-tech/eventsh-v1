@@ -4,12 +4,18 @@ import { Model, Types } from "mongoose";
 import { StallsService } from "../stalls/stalls.service";
 import { SpeakerRequestsService } from "../speaker-requests/speaker-requests.service";
 import { TicketsService } from "../tickets/tickets.service";
+import { SponsorsService } from "../sponsors/sponsors.service";
+import { WorkshopRequestsService } from "../workshop-requests/workshop-requests.service";
+import { ScheduledSpacesService } from "../scheduled-spaces/scheduled-spaces.service";
 
 /** What ComBox may do to a row of each part of an event (the rest of the part stays read-only there). */
 export const ACTIONS: Record<string, string[]> = {
   exhibitors: ["confirm", "cancel", "delete", "restore", "payment-status", "confirm-amendment", "cancellation", "return-deposit", "resend-ticket"],
   speakers: ["status"],
   tickets: ["resend-email", "mark-attendance"],
+  sponsors: ["status"],
+  "workshop-hosts": ["status", "fee", "confirm-payment"],
+  "scheduled-spaces": ["confirm-payment", "status", "resend-ticket", "delete"],
 };
 
 const BY = "ComBox";
@@ -25,9 +31,15 @@ export class ComboxActionsService {
     @InjectModel("Stall") private readonly stallModel: Model<any>,
     @InjectModel("SpeakerRequest") private readonly speakerModel: Model<any>,
     @InjectModel("Ticket") private readonly ticketModel: Model<any>,
+    @InjectModel("SponsorRequest") private readonly sponsorModel: Model<any>,
+    @InjectModel("WorkshopRequest") private readonly workshopHostModel: Model<any>,
+    @InjectModel("ScheduledSpaceRequest") private readonly scheduledModel: Model<any>,
     private readonly stalls: StallsService,
     private readonly speakers: SpeakerRequestsService,
     private readonly tickets: TicketsService,
+    private readonly sponsors: SponsorsService,
+    private readonly workshopHosts: WorkshopRequestsService,
+    private readonly scheduled: ScheduledSpacesService,
   ) {}
 
   private async ownsEvent(organizerId: string, eventId: any) {
@@ -45,7 +57,13 @@ export class ComboxActionsService {
       return this.tickets.markAttendance(t.ticketId);
     }
     if (!Types.ObjectId.isValid(id)) throw new NotFoundException("Not found");
-    const model = section === "exhibitors" ? this.stallModel : this.speakerModel;
+    const model: Model<any> = {
+      exhibitors: this.stallModel,
+      speakers: this.speakerModel,
+      sponsors: this.sponsorModel,
+      "workshop-hosts": this.workshopHostModel,
+      "scheduled-spaces": this.scheduledModel,
+    }[section]!;
     const doc: any = await model.findById(id).select("eventId").lean();
     if (!doc) throw new NotFoundException("Not found");
     await this.ownsEvent(organizerId, doc.eventId);
@@ -54,6 +72,33 @@ export class ComboxActionsService {
     if (section === "speakers") {
       if (!["Approved", "Rejected"].includes(body?.status)) throw new BadRequestException("Choose Approved or Rejected.");
       return this.speakers.updateStatus(id, { status: body.status, notes: notes || undefined, changedBy: BY } as any);
+    }
+    if (section === "sponsors") {
+      if (!["Approved", "Rejected", "Cancelled"].includes(body?.status)) throw new BadRequestException("Choose Approved, Rejected or Cancelled.");
+      return this.sponsors.updateStatus(id, { status: body.status, notes: notes || undefined, rejectionReason: body.status === "Rejected" ? notes : undefined, changedBy: BY } as any);
+    }
+    if (section === "workshop-hosts") {
+      if (action === "confirm-payment") return this.workshopHosts.confirmPayment(id, notes || "Payment approved from ComBox.", BY);
+      if (action === "fee") {
+        const fee = Number(body?.fee);
+        if (typeof body?.isCharged !== "boolean" || (body.isCharged && !(fee >= 0))) throw new BadRequestException("Say whether the host is charged and the fee.");
+        return this.workshopHosts.updateFee(id, { isCharged: body.isCharged, fee: body.isCharged ? fee : 0, notes: notes || undefined } as any);
+      }
+      if (!["Confirmed", "Rejected", "Cancelled"].includes(body?.status)) throw new BadRequestException("Choose Confirmed, Rejected or Cancelled.");
+      return this.workshopHosts.updateStatus(id, { status: body.status, notes: notes || undefined, rejectionReason: body.status === "Rejected" ? notes : undefined, changedBy: BY } as any);
+    }
+    if (section === "scheduled-spaces") {
+      switch (action) {
+        case "confirm-payment":
+          return this.scheduled.confirmPayment({ requestId: id, notes: notes || "Payment approved from ComBox.", changedBy: BY } as any);
+        case "status":
+          if (!["Confirmed", "Rejected", "Cancelled", "Completed"].includes(body?.status)) throw new BadRequestException("Choose Confirmed, Rejected, Cancelled or Completed.");
+          return this.scheduled.updateStatus(id, { status: body.status, cancellationReason: notes || undefined, changedBy: BY } as any);
+        case "resend-ticket":
+          return this.scheduled.resendTicket(id, BY);
+        case "delete":
+          return this.scheduled.remove(id);
+      }
     }
     switch (action) {
       case "confirm":

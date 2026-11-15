@@ -364,6 +364,7 @@ export class ComboxFeedService {
             { key: "seats", label: "Seats", format: "number" },
             { key: "price", label: "Price", format: "money" },
             { key: "fee", label: "Hosting fee", format: "money" },
+            { key: "payment", label: "Fee payment", format: "status" },
             { key: "status", label: "Status", format: "status" },
           ],
           rows: rows.map((w) => ({
@@ -374,6 +375,8 @@ export class ComboxFeedService {
             seats: w.maxSeats ?? null,
             price: w.finalPrice || w.proposedPrice || 0,
             fee: w.isCharged ? w.hostingFee ?? 0 : 0,
+            isCharged: !!w.isCharged,
+            payment: w.isCharged ? w.paymentStatus ?? null : null,
             status: w.status,
           })),
         };
