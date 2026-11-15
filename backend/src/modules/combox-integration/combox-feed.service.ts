@@ -257,6 +257,12 @@ export class ComboxFeedService {
               checkedIn: !!s.hasCheckedIn,
               requested: s.requestDate ?? s.createdAt,
               canApprove: awaitingApproval("exhibitors", s),
+              // what decides which organizer actions ComBox offers on the row
+              deposit: s.depositTotal ?? 0,
+              depositReturned: !!s.depositReturned,
+              amendmentPending: !!s.pendingAmendment,
+              cancellationRequested: !!s.pendingCancellation,
+              cancellationReason: s.pendingCancellation?.reason ?? null,
             };
           }),
         };

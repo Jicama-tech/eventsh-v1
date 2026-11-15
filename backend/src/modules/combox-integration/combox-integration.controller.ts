@@ -5,6 +5,7 @@ import { Model, Types } from "mongoose";
 import { ComboxKeyGuard } from "./combox-key.guard";
 import { ComboxFeedService, FEED_SECTIONS, FeedSection } from "./combox-feed.service";
 import { ComboxPaymentsService } from "./combox-payments.service";
+import { ComboxActionsService } from "./combox-actions.service";
 
 // Everything here is scoped to the organizer the API key belongs to
 // (ApiKeyGuard resolves req.organizerId from the key, never from the caller).
@@ -16,6 +17,7 @@ export class ComboxIntegrationController {
     @InjectModel("Ticket") private readonly ticketModel: Model<any>,
     private readonly feed: ComboxFeedService,
     private readonly payments: ComboxPaymentsService,
+    private readonly actions: ComboxActionsService,
   ) {}
 
   /** Cheap check that the key works; returns the organizer id it is locked to. */
@@ -121,6 +123,20 @@ export class ComboxIntegrationController {
     @Body() body: { notes?: string },
   ) {
     return this.payments.approve(req.organizerId, section, id, body?.notes);
+  }
+
+  /** Send the ticket again to every confirmed exhibitor of an event. */
+  @Post("events/:id/bulk-send-tickets")
+  @HttpCode(200)
+  bulkSend(@Req() req: any, @Param("id") id: string, @Body() body: any) {
+    return this.actions.bulkSend(req.organizerId, id, body?.message, body?.channels, body?.attachTicket !== false);
+  }
+
+  /** An organizer action on one row (confirm, cancel, delete, restore, payment status, speaker decision, resend ticket, ...). */
+  @Post("actions/:section/:id/:action")
+  @HttpCode(200)
+  act(@Req() req: any, @Param("section") section: string, @Param("id") id: string, @Param("action") action: string, @Body() body: any) {
+    return this.actions.run(req.organizerId, section, id, action, body);
   }
 
   /**

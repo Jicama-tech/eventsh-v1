@@ -9,6 +9,8 @@ import { ComboxKeyController } from "./combox-key.controller";
 import { AnalyticsModule } from "../analytics/analytics.module";
 import { ComboxFeedService } from "./combox-feed.service";
 import { ComboxPaymentsService } from "./combox-payments.service";
+import { ComboxActionsService } from "./combox-actions.service";
+import { TicketsModule } from "../tickets/tickets.module";
 import { StallsModule } from "../stalls/stalls.module";
 import { SpeakerRequestsModule } from "../speaker-requests/speaker-requests.module";
 import { SponsorsModule } from "../sponsors/sponsors.module";
@@ -42,6 +44,7 @@ import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
     forwardRef(() => SponsorsModule),
     forwardRef(() => RoundTableBookingsModule),
     forwardRef(() => WorkshopBookingsModule),
+    forwardRef(() => TicketsModule),
     MongooseModule.forFeature([
       { name: "Event", schema: EventSchema },
       { name: "Ticket", schema: TicketSchema },
@@ -61,6 +64,6 @@ import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
   ],
   controllers: [ComboxIntegrationController, ComboxKeyController],
   // JwtAuthGuard (the key controller) injects JwtService, as in otp.module
-  providers: [ComboxKeyService, ComboxKeyGuard, JwtService, ComboxFeedService, ComboxPaymentsService],
+  providers: [ComboxKeyService, ComboxKeyGuard, JwtService, ComboxFeedService, ComboxPaymentsService, ComboxActionsService],
 })
 export class ComboxIntegrationModule {}
