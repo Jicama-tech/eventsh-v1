@@ -556,6 +556,9 @@ export class ComboxFeedService {
     const mark = (label: string, at: any, byWho?: string, note?: string) => at && timeline.push({ label, at, by: byWho, note });
     const history = (h: any[]) => (h || []).forEach((x) => mark(`Status: ${x.status}`, x.changedAt, x.changedBy, x.note));
     const sorted = () => timeline.sort((a, b) => +new Date(a.at) - +new Date(b.at));
+    // pictures the person uploaded (payment screenshot, logo, photos): paths on Eventsh, shown in ComBox's View dialog
+    const images: { label: string; path: string }[] = [];
+    const img = (label: string, p: any) => typeof p === "string" && p.startsWith("/") && images.push({ label, path: p });
 
     if (section === "exhibitors") {
       const s: any = await this.stallModel.findOne({ _id: rowId, ...by }).lean();
@@ -571,6 +574,11 @@ export class ComboxFeedService {
       mark("Checked out", s.checkOutTime);
       mark("Deposit returned", s.depositReturnedDate);
       history(s.statusHistory);
+      img("Payment screenshot", s.transactionScreenshot);
+      img("Edit request payment screenshot", s.pendingAmendment?.transactionScreenshot);
+      img("Company logo", s.companyLogo);
+      img("Registration document", s.registrationImage);
+      (s.productImage || []).forEach((p: any, i: number) => img(`Product photo ${i + 1}`, p));
       return {
         currency: org.currency,
         title: s.brandName || s.displayName || v?.businessName || v?.name || "Exhibitor",
@@ -602,6 +610,7 @@ export class ComboxFeedService {
           ]) },
         ].filter((g) => g.fields.length),
         timeline: sorted(),
+        images,
       };
     }
 
@@ -615,6 +624,7 @@ export class ComboxFeedService {
       mark("Checked in", s.checkInTime);
       mark("Checked out", s.checkOutTime);
       history(s.statusHistory);
+      img("Photo", s.image);
       return {
         currency: org.currency,
         title: s.name || "Speaker",
@@ -638,6 +648,7 @@ export class ComboxFeedService {
           ]) })),
         ].filter((g: any) => g.fields.length),
         timeline: sorted(),
+        images,
       };
     }
 
@@ -665,6 +676,57 @@ export class ComboxFeedService {
           ]) },
         ].filter((g) => g.fields.length),
         timeline: sorted(),
+        images,
+      };
+    }
+
+    if (section === "sponsors") {
+      const x: any = await this.sponsorModel.findOne({ _id: rowId, ...by }).lean();
+      if (!x) throw new NotFoundException("Not found");
+      mark("Applied", x.submittedAt ?? x.createdAt);
+      history(x.statusHistory);
+      img("Logo", x.logo);
+      img("Payment screenshot", x.transactionScreenshot);
+      return {
+        currency: org.currency,
+        title: x.companyName || "Sponsor",
+        subtitle: x.contactName || null,
+        status: x.status,
+        groups: [
+          { title: "Sponsor", fields: keep([
+            { label: "Status", value: x.status, format: "status" }, { label: "Company", value: x.companyName }, { label: "Contact", value: x.contactName },
+            { label: "Email", value: x.businessEmail || x.email }, { label: "Tier", value: x.sponsorTypeName },
+            { label: "Amount", value: x.amount, format: "money" }, { label: "Payment verified", value: !!x.paymentVerified, format: "bool" },
+          ]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+        images,
+      };
+    }
+
+    if (section === "scheduled-spaces") {
+      const x: any = await this.scheduledModel.findOne({ _id: rowId, eventId: new Types.ObjectId(eventId) }).lean();
+      if (!x) throw new NotFoundException("Not found");
+      mark("Requested", x.createdAt);
+      history(x.statusHistory);
+      img("Payment screenshot", x.transactionScreenshot);
+      return {
+        currency: org.currency,
+        title: x.name || "Booking",
+        subtitle: x.facilityTypeRequested || null,
+        status: x.status,
+        groups: [
+          { title: "Booking", fields: keep([
+            { label: "Status", value: x.status, format: "status" }, { label: "Payment", value: x.paymentStatus, format: "status" },
+            { label: "Space", value: x.facilityTypeRequested || [...new Set((x.selectedSlots || []).map((t: any) => t.spaceName))].join(", ") },
+            { label: "Slots", value: (x.selectedSlots || []).map((t: any) => `${t.date} ${t.startTime}-${t.endTime}`).join("; ") },
+            { label: "People", value: x.partySize ?? 1 }, { label: "Total", value: x.slotsTotal, format: "money" }, { label: "Paid", value: x.paidAmount, format: "money" },
+            { label: "Checked in", value: !!x.hasCheckedIn, format: "bool" },
+          ]) },
+          { title: "Booked by", fields: keep([{ label: "Name", value: x.name }, { label: "Email", value: x.email }, { label: "Phone", value: x.phone || x.whatsappNumber }]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+        images,
       };
     }
 
