@@ -5,7 +5,7 @@
 // summary. Amounts are plain numbers (currency named once at the top) so
 // they can be summed in Excel.
 
-import type { AgentBreakdown, AgentSectionKey, EventReport } from "./eventReportPdf";
+import { pctText, type AgentBreakdown, type AgentSectionKey, type EventReport } from "./eventReportPdf";
 import type { MemberSplit, SplitGroup } from "./memberSplit";
 
 type Cell = string | number | null | undefined;
@@ -217,21 +217,20 @@ function pushAgentRows(
   if (!ag || ag.agents.length + ag.direct.bookings === 0) return;
   const date = (d: any) => (d ? new Date(d).toLocaleDateString() : "");
   const grand = ag.viaAgents.revenue + ag.direct.revenue;
-  const share = (v: number) => (grand > 0 ? `${Math.round((v / grand) * 100)}%` : "0%");
   rows.push(["AGENT PERFORMANCE"]);
   rows.push([
-    "Rank", "Agent", "Referral code", "Active", "Bookings", "Revenue", "% of revenue",
+    "Rank", "Agent", "Referral code", "Active", "Bookings", "Revenue", "% of booking revenue", "% of agent sales",
     ...keys.flatMap((k) => [`${label(k)} bookings`, `${label(k)} revenue`]),
   ]);
   ag.agents.forEach((a, i) => {
     rows.push([
       i + 1, a.name, a.code, a.isActive ? "Yes" : "No", a.bookings, money(a.revenue),
-      share(a.revenue),
+      pctText(a.revenue, grand), pctText(a.revenue, ag.viaAgents.revenue),
       ...keys.flatMap((k) => [a.bySection[k]?.bookings ?? 0, money(a.bySection[k]?.revenue ?? 0)]),
     ]);
   });
-  rows.push(["", "Total via agents", "", "", ag.viaAgents.bookings, money(ag.viaAgents.revenue), share(ag.viaAgents.revenue)]);
-  rows.push(["", "Direct (no agent)", "", "", ag.direct.bookings, money(ag.direct.revenue), share(ag.direct.revenue)]);
+  rows.push(["", "Total via agents", "", "", ag.viaAgents.bookings, money(ag.viaAgents.revenue), pctText(ag.viaAgents.revenue, grand), ag.viaAgents.revenue > 0 ? "100%" : "—"]);
+  rows.push(["", "Direct (no agent)", "", "", ag.direct.bookings, money(ag.direct.revenue), pctText(ag.direct.revenue, grand)]);
   rows.push([]);
 
   // Paid or not; "Counted in revenue" says which are in the totals above.
