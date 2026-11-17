@@ -5,7 +5,7 @@
 // summary. Amounts are plain numbers (currency named once at the top) so
 // they can be summed in Excel.
 
-import type { AgentSectionKey, EventReport } from "./eventReportPdf";
+import type { AgentBreakdown, AgentSectionKey, EventReport } from "./eventReportPdf";
 import type { MemberSplit, SplitGroup } from "./memberSplit";
 
 type Cell = string | number | null | undefined;
@@ -130,45 +130,16 @@ export function buildEventReportCsv(
     }
   }
 
-  // Which agent each booking came through — everyone, best first, with a
-  // revenue column per section so agents compare across the event.
-  const ag = report.agents;
-  if (ag && ag.agents.length + ag.direct.bookings > 0) {
-    const keys = report.sections.map((s) => s.key).filter((k) => k !== "sponsors") as AgentSectionKey[];
-    const label = (k: string) => report.sections.find((s) => s.key === k)?.label || k;
-    const grand = ag.viaAgents.revenue + ag.direct.revenue;
-    rows.push(["AGENT PERFORMANCE"]);
-    rows.push([
-      "Rank", "Agent", "Referral code", "Active", "Bookings", "Revenue", "% of revenue",
-      ...keys.flatMap((k) => [`${label(k)} bookings`, `${label(k)} revenue`]),
-    ]);
-    ag.agents.forEach((a, i) => {
-      rows.push([
-        i + 1, a.name, a.code, a.isActive ? "Yes" : "No", a.bookings, money(a.revenue),
-        grand > 0 ? `${Math.round((a.revenue / grand) * 100)}%` : "0%",
-        ...keys.flatMap((k) => [a.bySection[k]?.bookings ?? 0, money(a.bySection[k]?.revenue ?? 0)]),
-      ]);
-    });
-    rows.push(["", "Total via agents", "", "", ag.viaAgents.bookings, money(ag.viaAgents.revenue),
-      grand > 0 ? `${Math.round((ag.viaAgents.revenue / grand) * 100)}%` : "0%"]);
-    rows.push(["", "Direct (no agent)", "", "", ag.direct.bookings, money(ag.direct.revenue),
-      grand > 0 ? `${Math.round((ag.direct.revenue / grand) * 100)}%` : "0%"]);
-    blank();
-  }
-
-  // Every booking made through an agent, paid or not (Counted = in revenue).
-  if (ag && ag.bookings && ag.bookings.length > 0) {
-    const label = (k: string) => report.sections.find((s) => s.key === k)?.label || k;
-    rows.push(["AGENT BOOKINGS"]);
-    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Amount", "Status", "Counted in revenue", "Revenue"]);
-    for (const k of ag.bookings) {
-      rows.push([
-        k.agentName, date(k.date), label(k.section), k.customer, k.item,
-        money(k.amount), k.status, k.counted ? "Yes" : "No", money(k.revenue),
-      ]);
-    }
-    blank();
-  }
+  // Which agent each booking came through, and every agent booking.
+  const agentKeys = report.sections
+    .map((s) => s.key)
+    .filter((k) => k !== "sponsors") as AgentSectionKey[];
+  pushAgentRows(
+    rows,
+    report.agents,
+    agentKeys,
+    (k) => report.sections.find((s) => s.key === k)?.label || k,
+  );
 
   const ex = report.expenses;
   if (ex && ex.items.length > 0) {
@@ -231,5 +202,78 @@ export function buildEventReportCsv(
   ]);
 
   // BOM so Excel reads the file as UTF-8 (names with accents, "—").
+  return "﻿" + toCsv(rows);
+}
+
+/** Agent performance (everyone, best first, with a column pair per section)
+ * and then every agent-credited booking. Shared by the full event report and
+ * the Event Intelligence dialog's agent export. */
+function pushAgentRows(
+  rows: Cell[][],
+  ag: AgentBreakdown | null | undefined,
+  keys: AgentSectionKey[],
+  label: (k: string) => string,
+) {
+  if (!ag || ag.agents.length + ag.direct.bookings === 0) return;
+  const date = (d: any) => (d ? new Date(d).toLocaleDateString() : "");
+  const grand = ag.viaAgents.revenue + ag.direct.revenue;
+  const share = (v: number) => (grand > 0 ? `${Math.round((v / grand) * 100)}%` : "0%");
+  rows.push(["AGENT PERFORMANCE"]);
+  rows.push([
+    "Rank", "Agent", "Referral code", "Active", "Bookings", "Revenue", "% of revenue",
+    ...keys.flatMap((k) => [`${label(k)} bookings`, `${label(k)} revenue`]),
+  ]);
+  ag.agents.forEach((a, i) => {
+    rows.push([
+      i + 1, a.name, a.code, a.isActive ? "Yes" : "No", a.bookings, money(a.revenue),
+      share(a.revenue),
+      ...keys.flatMap((k) => [a.bySection[k]?.bookings ?? 0, money(a.bySection[k]?.revenue ?? 0)]),
+    ]);
+  });
+  rows.push(["", "Total via agents", "", "", ag.viaAgents.bookings, money(ag.viaAgents.revenue), share(ag.viaAgents.revenue)]);
+  rows.push(["", "Direct (no agent)", "", "", ag.direct.bookings, money(ag.direct.revenue), share(ag.direct.revenue)]);
+  rows.push([]);
+
+  // Paid or not; "Counted in revenue" says which are in the totals above.
+  if (ag.bookings?.length) {
+    rows.push(["AGENT BOOKINGS"]);
+    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Amount", "Status", "Counted in revenue", "Revenue"]);
+    for (const k of ag.bookings) {
+      rows.push([
+        k.agentName, date(k.date), label(k.section), k.customer, k.item,
+        money(k.amount), k.status, k.counted ? "Yes" : "No", money(k.revenue),
+      ]);
+    }
+    rows.push([]);
+  }
+}
+
+const AGENT_SECTION_LABELS: Record<AgentSectionKey, string> = {
+  visitors: "Tickets",
+  exhibitors: "Exhibitors",
+  roundTables: "Round tables",
+  workshops: "Workshops",
+  scheduledSpaces: "Scheduled spaces",
+  speakers: "Speakers",
+};
+
+/** Just the agent tables, for the Event Intelligence dialog's Export. */
+export function buildAgentsCsv(
+  eventTitle: string,
+  ag: AgentBreakdown,
+  currencyCode: string,
+): string {
+  const rows: Cell[][] = [
+    ["Agent Report", eventTitle],
+    ["Generated", new Date().toLocaleString()],
+    ["Amounts in", currencyCode],
+    [],
+  ];
+  pushAgentRows(
+    rows,
+    ag,
+    Object.keys(AGENT_SECTION_LABELS) as AgentSectionKey[],
+    (k) => AGENT_SECTION_LABELS[k as AgentSectionKey] || k,
+  );
   return "﻿" + toCsv(rows);
 }
