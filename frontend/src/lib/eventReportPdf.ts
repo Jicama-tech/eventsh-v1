@@ -69,8 +69,31 @@ export interface ReportProfit {
   platformFeeLines: { label: string; count: number; rate: number; amount: number }[];
 }
 
+export type AgentSectionKey = Exclude<SectionKey, "sponsors">;
+
+export interface AgentRow {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  bookings: number;
+  revenue: number;
+  bySection: Partial<Record<AgentSectionKey, { bookings: number; revenue: number }>>;
+}
+
+/** Bookings and revenue by the event agent they came through. */
+export interface AgentBreakdown {
+  /** Best performer first; agents with no bookings are included. */
+  agents: AgentRow[];
+  viaAgents: { bookings: number; revenue: number };
+  /** Bookings with no agent credited. */
+  direct: { bookings: number; revenue: number };
+}
+
 export interface EventReport {
   hasVisitorTicketing: boolean;
+  /** Null/missing when the event has no agents. */
+  agents?: AgentBreakdown | null;
   totalRevenue: number;
   sections: ReportSection[];
   /** Missing on the partial fallback. */
@@ -421,4 +444,103 @@ export function drawExpensesTable(
     doc.text(money(expenses.total), cAmt, ty, { align: "right" });
   }, [252, 226, 226]);
   return y + 6;
+}
+
+
+/** Rough height drawAgentsPdf needs, so the caller can page-break first. */
+export const agentsPdfHeight = (b: AgentBreakdown) =>
+  96 + Math.min(b.agents.length, 12) * 26 + 24;
+
+/**
+ * Agent performance infographic: a via-agents vs direct split bar, then one
+ * ranked revenue bar per agent (best first, top 12 — the Excel export lists
+ * everyone). Returns the y below it.
+ */
+export function drawAgentsPdf(
+  doc: jsPDF,
+  b: AgentBreakdown,
+  opts: { x: number; y: number; width: number; money: (v: number) => string },
+): number {
+  const { x, width, money } = opts;
+  const INK: RGB = [20, 20, 20];
+  const GRAY: RGB = [107, 114, 128];
+  const LIGHT: RGB = [243, 244, 246];
+  const INDIGO: RGB = [99, 102, 241];
+  const SLATE: RGB = [148, 163, 184];
+  const fill = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
+  const text = (c: RGB) => doc.setTextColor(c[0], c[1], c[2]);
+  let y = opts.y;
+
+  text(INK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Agent performance", x, y);
+  text(GRAY);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.text("Paid bookings made through each agent's referral link.", x, y + 13);
+  y += 26;
+
+  // via agents vs direct
+  const total = b.viaAgents.revenue + b.direct.revenue;
+  const pct = total > 0 ? b.viaAgents.revenue / total : 0;
+  fill(LIGHT);
+  doc.roundedRect(x, y, width, 14, 4, 4, "F");
+  if (pct > 0) {
+    fill(INDIGO);
+    doc.roundedRect(x, y, Math.max(8, width * pct), 14, 4, 4, "F");
+  }
+  y += 26;
+  doc.setFontSize(8.5);
+  fill(INDIGO);
+  doc.circle(x + 4, y - 3, 3, "F");
+  text(INK);
+  doc.text(
+    `Via agents: ${money(b.viaAgents.revenue)} · ${b.viaAgents.bookings} bookings (${Math.round(pct * 100)}%)`,
+    x + 12,
+    y,
+  );
+  fill(SLATE);
+  doc.circle(x + width * 0.55, y - 3, 3, "F");
+  doc.text(
+    `Direct: ${money(b.direct.revenue)} · ${b.direct.bookings} bookings`,
+    x + width * 0.55 + 8,
+    y,
+  );
+  y += 18;
+
+  const shown = b.agents.slice(0, 12);
+  const max = Math.max(1, ...shown.map((a) => a.revenue));
+  const nameW = width * 0.3;
+  const barX = x + nameW + 6;
+  const barW = width - nameW - 6 - 150;
+  shown.forEach((a, i) => {
+    const clip = doc.splitTextToSize(`${i + 1}. ${a.name}`, nameW)[0] || "";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    text(INK);
+    doc.text(clip, x, y + 9);
+    fill(LIGHT);
+    doc.roundedRect(barX, y, barW, 12, 3, 3, "F");
+    if (a.revenue > 0) {
+      fill(INDIGO);
+      doc.roundedRect(barX, y, Math.max(4, (a.revenue / max) * barW), 12, 3, 3, "F");
+    }
+    doc.setFont("helvetica", "normal");
+    text(GRAY);
+    doc.text(
+      `${money(a.revenue)} · ${a.bookings} booking${a.bookings === 1 ? "" : "s"}`,
+      x + width,
+      y + 9,
+      { align: "right" },
+    );
+    y += 26;
+  });
+  if (b.agents.length > shown.length) {
+    text(GRAY);
+    doc.setFontSize(8);
+    doc.text(`+ ${b.agents.length - shown.length} more agents in the Excel export.`, x, y);
+    y += 14;
+  }
+  return y + 4;
 }

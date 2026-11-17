@@ -15,6 +15,7 @@ import { SupplierRequestSchema } from "../suppliers/entities/supplier-request.en
 import { PlatformBillingRatesSchema } from "../admin/entities/platform-billing-rates.entity";
 import { EventExpenseSchema } from "../expenses/entities/event-expense.entity";
 import { WorkshopBookingSchema } from "../workshop-bookings/entities/workshop-booking.entity";
+import { EventAgentSchema } from "../event-agents/schemas/event-agent.schema";
 import { ScheduledSpaceRequestSchema } from "../scheduled-spaces/entities/scheduled-space-request.entity";
 
 /**
@@ -36,6 +37,7 @@ import { ScheduledSpaceRequestSchema } from "../scheduled-spaces/entities/schedu
       { name: "EventExpense", schema: EventExpenseSchema },
       { name: "WorkshopBooking", schema: WorkshopBookingSchema },
       { name: "ScheduledSpaceRequest", schema: ScheduledSpaceRequestSchema },
+      { name: "EventAgent", schema: EventAgentSchema },
     ]),
     // JwtAuthGuard injects JwtService — it verifies with JWT_ACCESS_SECRET
     // itself, so these register options only need to provide the instance.

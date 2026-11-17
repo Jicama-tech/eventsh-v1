@@ -58,6 +58,8 @@ import {
 } from "@/lib/memberSplit";
 import { buildEventReportCsv } from "@/lib/eventReportCsv";
 import {
+  agentsPdfHeight,
+  drawAgentsPdf,
   drawExpensesTable,
   drawSectionTable,
   fallbackReport,
@@ -1430,6 +1432,17 @@ export default function DashboardOverview({
             });
           }
         }
+      }
+
+      // Which agent brought in what — only for events that use agents.
+      if (report.agents) {
+        y = pageBreak(y + 22, agentsPdfHeight(report.agents));
+        y = drawAgentsPdf(doc, report.agents, {
+          x: margin,
+          y: y === margin ? y + 12 : y,
+          width: innerW,
+          money: pdfPrice,
+        });
       }
 
       // Logged expenses — approved ones come off the revenue below.

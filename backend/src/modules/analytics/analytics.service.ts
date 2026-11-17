@@ -50,6 +50,35 @@ export interface ReportSection {
   adjustments: { label: string; amount: number }[];
 }
 
+/** Section keys an agent's bookings are split by (no sponsors: sponsor
+ * requests aren't taken through referral links). */
+export type SectionKeyName =
+  | "visitors"
+  | "exhibitors"
+  | "roundTables"
+  | "workshops"
+  | "scheduledSpaces"
+  | "speakers";
+
+export interface AgentRow {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  bookings: number;
+  revenue: number;
+  bySection: Partial<Record<SectionKeyName, { bookings: number; revenue: number }>>;
+}
+
+/** Bookings and revenue by the agent they came through. */
+export interface AgentBreakdown {
+  /** Best performer first. Agents with no bookings are listed too. */
+  agents: AgentRow[];
+  viaAgents: { bookings: number; revenue: number };
+  /** Bookings with no agent credited. */
+  direct: { bookings: number; revenue: number };
+}
+
 /**
  * Per-event profit and loss for an organizer.
  *
@@ -82,6 +111,7 @@ export class AnalyticsService {
     @InjectModel("WorkshopBooking") private workshopBookingModel: Model<any>,
     @InjectModel("ScheduledSpaceRequest")
     private scheduledSpaceRequestModel: Model<any>,
+    @InjectModel("EventAgent") private eventAgentModel: Model<any>,
   ) {}
 
   private assertId(id: string, label = "id") {
@@ -135,6 +165,125 @@ export class AnalyticsService {
    * on: booked spaces, round tables with any seat taken, seats, and
    * confirmed speakers, each at its platform rate.
    */
+  /**
+   * Which agent each booking came through, and what it brought in. Uses the
+   * same "money received" rules as the sections, so the agents' revenue plus
+   * the direct (no agent) revenue adds up to the sections' total. Returns
+   * null when the event has no agents and no agent-credited bookings.
+   */
+  private async agentBreakdown(
+    eventId: string,
+    data: {
+      tickets: any[];
+      stalls: any[];
+      rounds: any[];
+      workshops: any[];
+      scheduled: any[];
+      speakers: any[];
+    },
+  ): Promise<AgentBreakdown | null> {
+    const n = (v: any) => Number(v) || 0;
+    const agentDocs = (await this.eventAgentModel
+      .find({ eventId: { $in: [eventId, new Types.ObjectId(eventId)] } })
+      .select("name referralCode isActive")
+      .lean()) as any[];
+
+    const rows = new Map<string, AgentRow>();
+    const rowFor = (id: string, snapshotName: string): AgentRow => {
+      let r = rows.get(id);
+      if (!r) {
+        r = {
+          id,
+          name: snapshotName || "Removed agent",
+          code: "",
+          isActive: false,
+          bookings: 0,
+          revenue: 0,
+          bySection: {},
+        };
+        rows.set(id, r);
+      }
+      return r;
+    };
+    for (const a of agentDocs) {
+      const r = rowFor(String(a._id), String(a.name || ""));
+      r.name = String(a.name || r.name);
+      r.code = String(a.referralCode || "");
+      r.isActive = a.isActive !== false;
+    }
+    const direct = { bookings: 0, revenue: 0 };
+
+    const credit = (key: SectionKeyName, doc: any, revenue: number) => {
+      const id = doc?.referralAgentId ? String(doc.referralAgentId) : "";
+      // A booking credited to an operator code (no agent) counts as direct.
+      const target = id ? rowFor(id, String(doc.referralAgentName || "")) : null;
+      const bucket = target ?? direct;
+      bucket.bookings += 1;
+      bucket.revenue += revenue;
+      if (target) {
+        const sec = (target.bySection[key] ||= { bookings: 0, revenue: 0 });
+        sec.bookings += 1;
+        sec.revenue += revenue;
+      }
+    };
+
+    for (const t of data.tickets) {
+      if (
+        String(t.ticketId || "").startsWith("WS-") ||
+        String(t.status) === "cancelled" ||
+        !t.paymentConfirmed
+      ) {
+        continue;
+      }
+      credit("visitors", t, n(t.totalAmount));
+    }
+    for (const s of data.stalls) {
+      if (String(s.paymentStatus) !== "Paid" || String(s.status) === "Cancelled") continue;
+      credit("exhibitors", s, n(s.grandTotal));
+    }
+    for (const r of data.rounds) {
+      if (String(r.paymentStatus) !== "Paid") continue;
+      credit("roundTables", r, n(r.amount));
+    }
+    for (const w of data.workshops) {
+      if (String(w.paymentStatus) !== "Paid") continue;
+      credit("workshops", w, n(w.amount));
+    }
+    for (const r of data.scheduled) {
+      if (
+        !["Paid", "Partial"].includes(String(r.paymentStatus)) ||
+        ["Cancelled", "Rejected"].includes(String(r.status))
+      ) {
+        continue;
+      }
+      const slots: any[] = r.selectedSlots || [];
+      const full = slots.reduce((a, x) => a + n(x.price), 0) || n(r.slotsTotal);
+      const share =
+        String(r.paymentStatus) === "Paid" || full === 0
+          ? 1
+          : Math.min(1, n(r.paidAmount) / full);
+      credit("scheduledSpaces", r, full * share);
+    }
+    for (const s of data.speakers) {
+      if (!["Confirmed", "Completed"].includes(String(s.status))) continue;
+      credit(
+        "speakers",
+        s,
+        s.isCharged && String(s.paymentStatus) === "Paid" ? n(s.fee) : 0,
+      );
+    }
+
+    if (agentDocs.length === 0 && rows.size === 0) return null;
+    const agents = [...rows.values()].sort(
+      (a, b) => b.revenue - a.revenue || b.bookings - a.bookings || a.name.localeCompare(b.name),
+    );
+    const viaAgents = {
+      bookings: agents.reduce((a, x) => a + x.bookings, 0),
+      revenue: agents.reduce((a, x) => a + x.revenue, 0),
+    };
+    return { agents, viaAgents, direct };
+  }
+
   private platformFeeFor(
     event: any,
     speakers: any[],
@@ -505,31 +654,31 @@ export class AnalyticsService {
       (await Promise.all([
         this.ticketModel
           .find(byEvent)
-          .select("ticketId ticketDetails totalAmount paymentConfirmed status")
+          .select("ticketId ticketDetails totalAmount paymentConfirmed status referralAgentId referralAgentName")
           .lean(),
         this.stallModel
           .find(byEvent)
           .select(
-            "status paymentStatus selectedTables selectedAddOns tablesTotal depositTotal addOnsTotal grandTotal",
+            "status paymentStatus selectedTables selectedAddOns tablesTotal depositTotal addOnsTotal grandTotal referralAgentId referralAgentName",
           )
           .lean(),
         this.roundTableModel
           .find(byEvent)
           .select(
-            "tablePositionId tableName sellingMode isWholeTable numberOfSeats selectedChairIndices amount paymentStatus",
+            "tablePositionId tableName sellingMode isWholeTable numberOfSeats selectedChairIndices amount paymentStatus referralAgentId referralAgentName",
           )
           .lean(),
         this.workshopBookingModel
           .find(byEvent)
-          .select("bookingType sessionId packageId itemName quantity amount paymentStatus")
+          .select("bookingType sessionId packageId itemName quantity amount paymentStatus referralAgentId referralAgentName")
           .lean(),
         this.scheduledSpaceRequestModel
           .find(byEvent)
-          .select("status paymentStatus selectedSlots slotsTotal paidAmount")
+          .select("status paymentStatus selectedSlots slotsTotal paidAmount referralAgentId referralAgentName")
           .lean(),
         this.speakerModel
           .find(byEvent)
-          .select("selectedSlotId selectedSlotName status isCharged fee paymentStatus")
+          .select("selectedSlotId selectedSlotName status isCharged fee paymentStatus referralAgentId referralAgentName")
           .lean(),
         this.sponsorModel
           .find(byEvent)
@@ -1143,6 +1292,14 @@ export class AnalyticsService {
       (s) => n(s.depositTotal),
     );
     const supplierTotals = this.supplierCosts(supplierReqs);
+    const agents = await this.agentBreakdown(eventId, {
+      tickets,
+      stalls,
+      rounds,
+      workshops,
+      scheduled,
+      speakers,
+    });
     const fee = this.platformFeeFor(event, speakers, rates);
     const deductions = [
       { key: "deposits", label: "Security deposits (refundable)", amount: depositsHeld },
@@ -1158,6 +1315,7 @@ export class AnalyticsService {
       hasVisitorTicketing: sections.some((s) => s.key === "visitors"),
       totalRevenue,
       sections,
+      agents,
       expenses: {
         total: expensesTotal,
         pending: sum(
