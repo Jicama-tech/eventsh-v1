@@ -194,6 +194,23 @@ export function ScheduledSpaceAnalytics({
     URL.revokeObjectURL(url);
   };
 
+  // Infographic PDF: KPIs, slot status, occupancy charts and agent graphs.
+  const exportPdf = async () => {
+    if (!data) return;
+    const [{ default: jsPDF }, { buildScheduledSpacesPdf }] = await Promise.all([
+      import("jspdf"),
+      import("@/lib/scheduledSpacesPdf"),
+    ]);
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    buildScheduledSpacesPdf(doc, data, {
+      eventTitle: String(eventTitle),
+      money: (v: number) => formatPrice(v).replace(/[.,]00$/, ""),
+    });
+    doc.save(
+      `${String(eventTitle).replace(/[^a-z0-9]/gi, "_")}_Scheduled_Spaces_${new Date().toISOString().slice(0, 10)}.pdf`,
+    );
+  };
+
   if (loading) {
     return (
       <div className="py-16 text-center text-muted-foreground">
@@ -223,9 +240,14 @@ export function ScheduledSpaceAnalytics({
         <p className="text-sm text-muted-foreground">
           Seats left per time slot, who booked, and the request funnel.
         </p>
-        <Button variant="outline" size="sm" onClick={exportCsv}>
-          <Download className="mr-1 h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportCsv}>
+            <Download className="mr-1 h-4 w-4" /> Export Excel (CSV)
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportPdf}>
+            <Download className="mr-1 h-4 w-4" /> Export PDF
+          </Button>
+        </div>
       </div>
 
       {/* Capacity overview */}

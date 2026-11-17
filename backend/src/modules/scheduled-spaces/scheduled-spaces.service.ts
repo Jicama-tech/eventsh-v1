@@ -1255,6 +1255,27 @@ export class ScheduledSpacesService {
     let revenuePending = 0;
     let people = 0;
     let checkedIn = 0;
+    // Bookings that hold slots (awaiting approval or confirmed), split by the
+    // event agent they came through. Free bookings count: slots are the unit.
+    type AgentBucket = {
+      bookings: number;
+      slots: number;
+      people: number;
+      revenueConfirmed: number;
+      revenuePending: number;
+    };
+    const emptyBucket = (): AgentBucket => ({
+      bookings: 0,
+      slots: 0,
+      people: 0,
+      revenueConfirmed: 0,
+      revenuePending: 0,
+    });
+    const agentBuckets = new Map<
+      string,
+      AgentBucket & { id: string; name: string; code: string }
+    >();
+    const directBucket = emptyBucket();
     for (const r of requests) {
       statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
       const slotValue = (r.selectedSlots || []).reduce(
@@ -1269,7 +1290,42 @@ export class ScheduledSpacesService {
         revenuePending += slotValue;
         people += r.partySize || 1;
       }
+
+      if (HOLDING.has(r.status) && (r.selectedSlots || []).length > 0) {
+        const agentId = (r as any).referralAgentId
+          ? String((r as any).referralAgentId)
+          : "";
+        let bucket: AgentBucket;
+        if (agentId) {
+          let a = agentBuckets.get(agentId);
+          if (!a) {
+            a = {
+              ...emptyBucket(),
+              id: agentId,
+              name: String((r as any).referralAgentName || "Agent"),
+              code: String(r.referralCode || ""),
+            };
+            agentBuckets.set(agentId, a);
+          }
+          bucket = a;
+        } else {
+          bucket = directBucket;
+        }
+        bucket.bookings += 1;
+        bucket.slots += (r.selectedSlots || []).length;
+        bucket.people += r.partySize || 1;
+        if (r.status === ScheduledSpaceStatusEnum.Completed) {
+          bucket.revenueConfirmed += slotValue;
+        } else {
+          bucket.revenuePending += slotValue;
+        }
+      }
     }
+    const agentList = Array.from(agentBuckets.values()).sort(
+      (a, b) => b.slots - a.slots || b.revenueConfirmed - a.revenueConfirmed,
+    );
+    const sumOf = (f: (a: AgentBucket) => number) =>
+      agentList.reduce((n, a) => n + f(a), 0);
 
     return {
       success: true,
@@ -1291,6 +1347,20 @@ export class ScheduledSpacesService {
           revenueConfirmed,
           revenuePending,
         },
+        // Null when no booking came through an agent.
+        agents: agentList.length
+          ? {
+              agents: agentList,
+              viaAgents: {
+                bookings: sumOf((a) => a.bookings),
+                slots: sumOf((a) => a.slots),
+                people: sumOf((a) => a.people),
+                revenueConfirmed: sumOf((a) => a.revenueConfirmed),
+                revenuePending: sumOf((a) => a.revenuePending),
+              },
+              direct: directBucket,
+            }
+          : null,
         byFacility: Array.from(byFacility.values()).map((f) => ({
           ...f,
           spaces: f.spaces.size,
