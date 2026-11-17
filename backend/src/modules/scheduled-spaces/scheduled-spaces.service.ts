@@ -1255,8 +1255,9 @@ export class ScheduledSpacesService {
     let revenuePending = 0;
     let people = 0;
     let checkedIn = 0;
-    // Bookings that hold slots (awaiting approval or confirmed), split by the
-    // event agent they came through. Free bookings count: slots are the unit.
+    // Sold and confirmed bookings only (status Completed - not awaiting
+    // approval, cancelled or rejected), split by the event agent they came
+    // through. Free bookings count: slots are the unit.
     type AgentBucket = {
       bookings: number;
       slots: number;
@@ -1291,7 +1292,10 @@ export class ScheduledSpacesService {
         people += r.partySize || 1;
       }
 
-      if (HOLDING.has(r.status) && (r.selectedSlots || []).length > 0) {
+      if (
+        r.status === ScheduledSpaceStatusEnum.Completed &&
+        (r.selectedSlots || []).length > 0
+      ) {
         const agentId = (r as any).referralAgentId
           ? String((r as any).referralAgentId)
           : "";
@@ -1314,11 +1318,7 @@ export class ScheduledSpacesService {
         bucket.bookings += 1;
         bucket.slots += (r.selectedSlots || []).length;
         bucket.people += r.partySize || 1;
-        if (r.status === ScheduledSpaceStatusEnum.Completed) {
-          bucket.revenueConfirmed += slotValue;
-        } else {
-          bucket.revenuePending += slotValue;
-        }
+        bucket.revenueConfirmed += slotValue;
       }
     }
     const agentList = Array.from(agentBuckets.values()).sort(

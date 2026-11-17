@@ -333,7 +333,9 @@ export class AnalyticsService {
     for (const r of data.scheduled) {
       const slots: any[] = r.selectedSlots || [];
       const full = slots.reduce((a, x) => a + n(x.price), 0) || n(r.slotsTotal);
-      const alive = !["Cancelled", "Rejected"].includes(String(r.status));
+      // Sold = confirmed (status Completed). Awaiting-approval, cancelled and
+      // rejected requests are left out.
+      const alive = String(r.status) === "Completed";
       const paidOk = ["Paid", "Partial"].includes(String(r.paymentStatus)) && alive;
       const share =
         String(r.paymentStatus) === "Paid" || full === 0
