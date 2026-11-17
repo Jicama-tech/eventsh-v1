@@ -11,6 +11,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   CalendarClock,
@@ -81,6 +91,8 @@ const ScheduledSpaceRequests = ({
   const [rejectReason, setRejectReason] = useState("");
   const [confirmNote, setConfirmNote] = useState("");
   const [cancelReason, setCancelReason] = useState("");
+  // In-app confirmation before deleting a paid and confirmed booking.
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [noteFormOpen, setNoteFormOpen] = useState(false);
   const [standaloneNote, setStandaloneNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
@@ -762,15 +774,7 @@ const ScheduledSpaceRequests = ({
                     variant="outline"
                     className="w-full border-red-300 text-red-600 hover:text-red-700"
                     disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Delete this paid and confirmed booking? It will be cancelled and its slot(s) released. Refunding the registrant is handled separately.",
-                        )
-                      ) {
-                        updateStatus("Cancelled", cancelReason.trim() || undefined);
-                      }
-                    }}
+                    onClick={() => setConfirmDeleteOpen(true)}
                   >
                     {busy ? <Loader2 size={14} className="animate-spin" /> : "Delete Booking & Release Slots"}
                   </Button>
@@ -867,6 +871,34 @@ const ScheduledSpaceRequests = ({
           </DialogContent>
         )}
       </Dialog>
+
+      {/* Confirm deleting a paid and confirmed booking. */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Delete this booking?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selected?.name ? `${selected.name}'s ` : "This "}
+              {t(
+                "paid and confirmed booking will be cancelled and its slot(s) released so others can book them. It stays in the list as Cancelled, and the timeline records who did this. Refunding the registrant is handled separately.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>{t("Keep booking")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
+                setConfirmDeleteOpen(false);
+                updateStatus("Cancelled", cancelReason.trim() || undefined);
+              }}
+            >
+              {t("Delete booking")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
