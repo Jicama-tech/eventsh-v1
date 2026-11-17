@@ -1130,6 +1130,9 @@ export class ScheduledSpacesService {
           paymentStatus: r.paymentStatus,
           price: s.price || 0,
           checkedIn: !!r.hasCheckedIn,
+          // Event agent the booking came through (organizer-only analytics).
+          agentName: (r as any).referralAgentName || "",
+          referralCode: (r as any).referralAgentId ? r.referralCode || "" : "",
         });
         holders.set(token, list);
       }

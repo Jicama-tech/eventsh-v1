@@ -146,6 +146,8 @@ export function ScheduledSpaceAnalytics({
         "Remaining",
         "Status",
         "Booked By",
+        "Agent",
+        "Agent Code",
       ],
     ];
     for (const sp of data.spaces) {
@@ -164,6 +166,10 @@ export function ScheduledSpaceAnalytics({
           (sl.holders || [])
             .map((h: any) => `${h.name} (${h.persons})`)
             .join("; "),
+          // One entry per holder, in the same order as "Booked By"; a dash
+          // for a booking that didn't come through an agent.
+          (sl.holders || []).map((h: any) => h.agentName || "-").join("; "),
+          (sl.holders || []).map((h: any) => h.referralCode || "-").join("; "),
         ]);
       }
     }
