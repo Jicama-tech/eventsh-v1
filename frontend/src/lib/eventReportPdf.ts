@@ -69,6 +69,11 @@ export interface ReportProfit {
   platformFeeLines: { label: string; count: number; rate: number; amount: number }[];
 }
 
+/** "12.5%" — one decimal so small shares don't read as 0%; "—" when there
+ * is nothing to take a share of. */
+export const pctText = (value: number, base: number): string =>
+  base > 0 ? `${(Math.round((value / base) * 1000) / 10).toString()}%` : "—";
+
 export type AgentSectionKey = Exclude<SectionKey, "sponsors">;
 
 export interface AgentRow {
@@ -512,24 +517,25 @@ export function drawAgentsPdf(
   doc.circle(x + 4, y - 3, 3, "F");
   text(INK);
   doc.text(
-    `Via agents: ${money(b.viaAgents.revenue)} · ${b.viaAgents.bookings} bookings (${Math.round(pct * 100)}%)`,
+    `Via agents: ${money(b.viaAgents.revenue)} · ${b.viaAgents.bookings} bookings (${pctText(b.viaAgents.revenue, total)})`,
     x + 12,
     y,
   );
   fill(SLATE);
   doc.circle(x + width * 0.55, y - 3, 3, "F");
   doc.text(
-    `Direct: ${money(b.direct.revenue)} · ${b.direct.bookings} bookings`,
+    `Direct: ${money(b.direct.revenue)} · ${b.direct.bookings} bookings (${pctText(b.direct.revenue, total)})`,
     x + width * 0.55 + 8,
     y,
   );
   y += 18;
 
   const shown = b.agents.slice(0, 12);
-  const max = Math.max(1, ...shown.map((a) => a.revenue));
+  // Bars are each agent's share of agent sales, so bar length = the %.
+  const max = Math.max(1, b.viaAgents.revenue);
   const nameW = width * 0.3;
   const barX = x + nameW + 6;
-  const barW = width - nameW - 6 - 150;
+  const barW = width - nameW - 6 - 210;
   shown.forEach((a, i) => {
     const clip = doc.splitTextToSize(`${i + 1}. ${a.name}`, nameW)[0] || "";
     doc.setFont("helvetica", "bold");
@@ -545,7 +551,7 @@ export function drawAgentsPdf(
     doc.setFont("helvetica", "normal");
     text(GRAY);
     doc.text(
-      `${money(a.revenue)} · ${a.bookings} booking${a.bookings === 1 ? "" : "s"}`,
+      `${money(a.revenue)} · ${a.bookings} booking${a.bookings === 1 ? "" : "s"} · ${pctText(a.revenue, b.viaAgents.revenue)} of agent sales`,
       x + width,
       y + 9,
       { align: "right" },

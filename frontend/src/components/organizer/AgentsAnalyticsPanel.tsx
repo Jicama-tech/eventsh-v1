@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { AgentBreakdown } from "@/lib/eventReportPdf";
+import { pctText, type AgentBreakdown } from "@/lib/eventReportPdf";
 
 const SECTION_NAMES: Record<string, string> = {
   visitors: "Tickets",
@@ -35,7 +35,7 @@ export function AgentsAnalyticsPanel({
 }) {
   const total = agents.viaAgents.revenue + agents.direct.revenue;
   const pct = total > 0 ? (agents.viaAgents.revenue / total) * 100 : 0;
-  const max = Math.max(1, ...agents.agents.map((a) => a.revenue));
+  const via = agents.viaAgents.revenue;
   const q = search.toLowerCase();
   const bookings = (agents.bookings || []).filter((k) =>
     `${k.agentName} ${k.customer} ${k.item}`.toLowerCase().includes(q),
@@ -48,11 +48,11 @@ export function AgentsAnalyticsPanel({
           <div className="flex flex-wrap justify-between gap-2 text-xs font-bold mb-2">
             <span className="text-indigo-600">
               Via agents: {formatPrice(agents.viaAgents.revenue)} ·{" "}
-              {agents.viaAgents.bookings} bookings ({Math.round(pct)}%)
+              {agents.viaAgents.bookings} bookings ({pctText(via, total)})
             </span>
             <span className="text-muted-foreground">
               Direct: {formatPrice(agents.direct.revenue)} ·{" "}
-              {agents.direct.bookings} bookings
+              {agents.direct.bookings} bookings ({pctText(agents.direct.revenue, total)})
             </span>
           </div>
           <div className="h-3 rounded-full bg-muted overflow-hidden">
@@ -82,12 +82,18 @@ export function AgentsAnalyticsPanel({
                   <span className="text-xs font-medium text-muted-foreground">
                     · {a.bookings} paid
                   </span>
+                  <span className="ml-2 text-xs font-bold text-indigo-600">
+                    {pctText(a.revenue, via)} of agent sales
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {pctText(a.revenue, total)} of booking revenue
+                  </span>
                 </div>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden mb-2">
                 <div
                   className="h-full bg-indigo-500"
-                  style={{ width: `${(a.revenue / max) * 100}%` }}
+                  style={{ width: `${via > 0 ? (a.revenue / via) * 100 : 0}%` }}
                 />
               </div>
               <div className="flex flex-wrap gap-2">
