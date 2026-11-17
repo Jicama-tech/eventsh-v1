@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
 import { AgentsAnalyticsPanel } from "./AgentsAnalyticsPanel";
+import { buildAgentsCsv } from "@/lib/eventReportCsv";
 import { fetchEventReport, type AgentBreakdown } from "@/lib/eventReportPdf";
 import { ScheduledSpaceAnalytics } from "./ScheduledSpaceAnalytics";
 import { useCountry } from "@/hooks/useCountry";
@@ -297,6 +298,8 @@ export function EventSpaceAnalyticsDialog({
       "Vendor Name",
       ...addOnCatalog.map((a) => a.name),
       "Price",
+      "Agent",
+      "Agent Code",
     ];
     const rows: string[][] = [header];
 
@@ -360,6 +363,8 @@ export function EventSpaceAnalyticsDialog({
           s?.shopkeeperId?.name || brandNameOf(s),
           ...addOnCells,
           String(price),
+          s?.referralAgentName || "",
+          s?.referralAgentId ? s?.referralCode || "" : "",
         ]);
 
         totalSpacesSold += 1;
@@ -376,9 +381,21 @@ export function EventSpaceAnalyticsDialog({
       "",
       ...addOnCatalog.map((a) => String(addOnQtyTotals.get(a.id) || 0)),
       "",
+      "",
+      "",
     ]);
 
     return rows;
+  };
+
+  // Agents view: agent performance + every agent booking, Excel (CSV) only.
+  const exportAgentsCsv = () => {
+    if (!agents) return;
+    const csv = buildAgentsCsv(String(eventTitle), agents, currency.code);
+    downloadBlob(
+      new Blob([csv], { type: "text/csv;charset=utf-8;" }),
+      `${safeName}_Agents_${stamp}.csv`,
+    );
   };
 
   // CSV — opens directly in Excel / Sheets.
@@ -819,6 +836,15 @@ export function EventSpaceAnalyticsDialog({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {showAgents ? (
+                      <DropdownMenuItem
+                        onClick={exportAgentsCsv}
+                        className="cursor-pointer"
+                      >
+                        <FileSpreadsheet className="mr-2 h-4 w-4" /> Export agents as Excel (CSV)
+                      </DropdownMenuItem>
+                    ) : (
+                      <>
                     <DropdownMenuItem onClick={exportCsv} className="cursor-pointer">
                       <FileSpreadsheet className="mr-2 h-4 w-4" /> Export as Excel (CSV)
                     </DropdownMenuItem>
@@ -847,6 +873,8 @@ export function EventSpaceAnalyticsDialog({
                             <FileText className="mr-2 h-4 w-4" /> Full report — PDF
                           </DropdownMenuItem>
                         )}
+                      </>
+                    )}
                       </>
                     )}
                   </DropdownMenuContent>
