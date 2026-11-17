@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
+import { JwtModule } from "@nestjs/jwt";
 import { ScheduledSpacesService } from "./scheduled-spaces.service";
 import { ScheduledSpacesController } from "./scheduled-spaces.controller";
 import {
@@ -24,6 +25,12 @@ import { OperatorsModule } from "../operators/operators.module";
     // organizer's own linked number).
     OtpModule,
     OperatorsModule,
+    // Verifies the caller's token to name who cancelled a booking. The secret
+    // is passed at verify time, so this only provides the JwtService.
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || "secretKey",
+      signOptions: { expiresIn: "1d" },
+    }),
   ],
   controllers: [ScheduledSpacesController],
   providers: [ScheduledSpacesService],
