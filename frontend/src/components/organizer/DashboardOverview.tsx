@@ -1699,6 +1699,16 @@ export default function DashboardOverview({
           if (!o) setSpaceAnalyticsEvent(null);
         }}
         event={spaceAnalyticsEvent}
+        onExportReportCsv={
+          canExports && spaceAnalyticsEvent
+            ? () => exportEventToCSV(spaceAnalyticsEvent)
+            : undefined
+        }
+        onExportReportPdf={
+          canExports && spaceAnalyticsEvent
+            ? () => exportEventToPDF(spaceAnalyticsEvent)
+            : undefined
+        }
       />
 
       {/* Ratings + comments, with the payment-feedback panel inside. */}
