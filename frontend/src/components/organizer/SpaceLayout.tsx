@@ -56,6 +56,10 @@ export interface SpaceLayoutProps {
   /** Placed scheduled-space facilities (courts, grounds, tables booked by
    * time slot). Drawn with their court markings, like the storefront map. */
   scheduledSpaces?: any[];
+  /** Individual seats (cinema / concert style) placed on the layout. */
+  seats?: any[];
+  /** Ids of seats already sold — drawn grey. */
+  bookedSeatIds?: string[];
   annotations?: VenueAnnotation[];
   /** Display px per logical unit. */
   scale?: number;
@@ -99,6 +103,8 @@ const SpaceLayout = forwardRef<HTMLDivElement, SpaceLayoutProps>(
       doors = [],
       speakerZones = [],
       scheduledSpaces = [],
+      seats = [],
+      bookedSeatIds = [],
       annotations = [],
       scale = 1,
       crop = false,
@@ -483,6 +489,42 @@ const SpaceLayout = forwardRef<HTMLDivElement, SpaceLayoutProps>(
                     {sp.facilityType}
                   </div>
                 </div>
+              </div>
+            );
+          })}
+
+        {/* Seats — square badges, grey once sold (storefront look) */}
+        {seats
+          .filter((seat) => inCrop(seat.x, seat.y))
+          .map((seat) => {
+            const sold = bookedSeatIds.includes(seat.id);
+            const label = seat.name || seat.seatNumber || "";
+            return (
+              <div
+                key={`seat-${seat.id}`}
+                title={`${label}${sold ? " — sold" : ""}`}
+                style={{
+                  position: "absolute",
+                  left: (seat.x || 0) * s,
+                  top: (seat.y || 0) * s,
+                  width: 30 * s,
+                  height: 30 * s,
+                  borderRadius: 5,
+                  backgroundColor: sold ? "#94a3b8" : seat.color || "#8B5CF6",
+                  border: "2px solid rgba(0,0,0,0.25)",
+                  opacity: sold ? 0.6 : 1,
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: Math.max(5, 7 * s),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  transform: seat.rotation ? `rotate(${seat.rotation}deg)` : undefined,
+                  zIndex: 5,
+                }}
+              >
+                {label}
               </div>
             );
           })}
