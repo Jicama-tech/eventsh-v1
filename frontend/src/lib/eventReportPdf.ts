@@ -88,6 +88,22 @@ export interface AgentBreakdown {
   viaAgents: { bookings: number; revenue: number };
   /** Bookings with no agent credited. */
   direct: { bookings: number; revenue: number };
+  /** Every booking credited to an agent, paid or not. */
+  bookings: AgentBooking[];
+}
+
+export interface AgentBooking {
+  agentId: string;
+  agentName: string;
+  section: AgentSectionKey;
+  customer: string;
+  item: string;
+  amount: number;
+  status: string;
+  /** Paid, so counted in the agent's revenue. */
+  counted: boolean;
+  revenue: number;
+  date: string | null;
 }
 
 export interface EventReport {
@@ -543,4 +559,94 @@ export function drawAgentsPdf(
     y += 14;
   }
   return y + 4;
+}
+
+/**
+ * Every booking made through an agent: one row each, grouped by agent
+ * (best performer first), with what was booked, the amount and its status.
+ * Returns the y below the table.
+ */
+export function drawAgentBookingsPdf(
+  doc: jsPDF,
+  b: AgentBreakdown,
+  sectionLabel: (key: string) => string,
+  opts: {
+    x: number;
+    y: number;
+    width: number;
+    money: (v: number) => string;
+    pageBreak: (y: number, need: number) => number;
+  },
+): number {
+  const { x, width, money, pageBreak } = opts;
+  const INK: RGB = [20, 20, 20];
+  const GRAY: RGB = [107, 114, 128];
+  const LIGHT: RGB = [243, 244, 246];
+  const INDIGO: RGB = [99, 102, 241];
+  const fill = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
+  const text = (c: RGB) => doc.setTextColor(c[0], c[1], c[2]);
+  const clip = (t: string, w: number) => doc.splitTextToSize(t || "—", w)[0] || "";
+  const ROW = 18;
+  const cSec = x + width * 0.2;
+  const cCust = x + width * 0.34;
+  const cItem = x + width * 0.55;
+  const cStat = x + width * 0.8;
+  const cAmt = x + width - 8;
+
+  let y = pageBreak(opts.y + 8, 60);
+  text(INK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("Agent bookings", x, y);
+  y += 16;
+
+  for (const a of b.agents) {
+    const list = b.bookings.filter((k) => k.agentId === a.id);
+    if (list.length === 0) continue;
+    y = pageBreak(y + 6, 22 + ROW * 2);
+    fill(INDIGO);
+    doc.roundedRect(x, y, width, 20, 4, 4, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(a.name, x + 8, y + 13);
+    doc.text(
+      `${a.bookings} paid · ${money(a.revenue)}`,
+      x + width - 8,
+      y + 13,
+      { align: "right" },
+    );
+    y += 22;
+    doc.setFontSize(7.5);
+    text(GRAY);
+    [
+      ["DATE", x + 8],
+      ["SECTION", cSec],
+      ["CUSTOMER", cCust],
+      ["BOOKED", cItem],
+      ["STATUS", cStat],
+    ].forEach(([h, hx]) => doc.text(h as string, hx as number, y + 9));
+    doc.text("AMOUNT", cAmt, y + 9, { align: "right" });
+    y += 14;
+    list.forEach((k, i) => {
+      y = pageBreak(y, ROW);
+      if (i % 2 === 0) {
+        fill(LIGHT);
+        doc.rect(x, y - 2, width, ROW, "F");
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      text(INK);
+      doc.text(clip(k.date ? new Date(k.date).toLocaleDateString() : "—", cSec - x - 12), x + 8, y + 10);
+      doc.text(clip(sectionLabel(k.section), cCust - cSec - 4), cSec, y + 10);
+      doc.text(clip(k.customer, cItem - cCust - 4), cCust, y + 10);
+      doc.text(clip(k.item, cStat - cItem - 4), cItem, y + 10);
+      text(k.counted ? [22, 163, 74] : GRAY);
+      doc.text(clip(k.status, cAmt - cStat - 50), cStat, y + 10);
+      text(INK);
+      doc.text(money(k.amount), cAmt, y + 10, { align: "right" });
+      y += ROW;
+    });
+  }
+  return y + 8;
 }

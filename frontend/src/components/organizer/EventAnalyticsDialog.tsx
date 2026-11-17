@@ -42,6 +42,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { t } from "@/i18n/t";
+import { fetchEventReport, type AgentBreakdown } from "@/lib/eventReportPdf";
+import { AgentsAnalyticsPanel } from "./AgentsAnalyticsPanel";
+import { buildAgentsCsv } from "@/lib/eventReportCsv";
 
 // --- Types ---
 interface TicketData {
@@ -76,10 +79,12 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [stalls, setStalls] = useState<StallData[]>([]);
   const [roundTables, setRoundTables] = useState<any[]>([]);
+  const [agents, setAgents] = useState<AgentBreakdown | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const { country } = useCountry();
-    const { formatPrice } = useCurrency(country);
+    const { formatPrice, config: currencyConfig } = useCurrency(country);
+  const [activeTab, setActiveTab] = useState("tickets");
 
   // --- Derived Metrics (canonical revenue — see lib/revenue.ts) ---
   // Paid & non-cancelled only, so this matches every other dashboard surface.
@@ -118,6 +123,14 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
       }
     };
     fetchData();
+    // Agent performance comes from the event report; events without agents
+    // get null and no tab.
+    const token = sessionStorage.getItem("token");
+    fetchEventReport(
+      __API_URL__,
+      event._id,
+      token ? { Authorization: `Bearer ${token}` } : {},
+    ).then((r) => setAgents(r?.agents ?? null));
   }, [isOpen, event._id]);
 
   // --- Excel Export Function ---
@@ -163,6 +176,18 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `${event.title}_${type}_report.csv`;
+    link.click();
+  };
+
+  // Agents tab: performance table plus every agent booking, as CSV.
+  const exportAgentsCsv = () => {
+    if (!agents) return;
+    const csv = buildAgentsCsv(event.title || "", agents, currencyConfig.code);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8;" }),
+    );
+    link.download = `${event.title}_agents_report.csv`;
     link.click();
   };
 
@@ -321,7 +346,8 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
           {/* MAIN CONTENT: TABS WITH LISTS */}
           <div className="flex-1 flex flex-col bg-background overflow-hidden">
             <Tabs
-              defaultValue="tickets"
+              value={activeTab}
+              onValueChange={setActiveTab}
               className="flex-1 flex flex-col overflow-hidden"
             >
               <div className="px-6 pt-4 flex justify-between items-center border-b">
@@ -334,6 +360,12 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     value="stalls"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-purple-600 rounded-none bg-transparent px-0 font-bold"
                   >{t("Exhibitors/Stalls")}</TabsTrigger>
+                  {agents && (
+                    <TabsTrigger
+                      value="agents"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 rounded-none bg-transparent px-0 font-bold"
+                    >{t("Agents")}</TabsTrigger>
+                  )}
                 </TabsList>
 
                 <div className="flex items-center gap-3">
@@ -350,7 +382,9 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     variant="outline"
                     size="sm"
                     className="h-8 text-xs gap-2"
-                    onClick={() => exportToCSV("tickets")}
+                    onClick={() =>
+                      activeTab === "agents" ? exportAgentsCsv() : exportToCSV("tickets")
+                    }
                   >
                     <Download className="w-3 h-3" /> Export
                   </Button>
@@ -511,6 +545,17 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                   </Table>
                 </ScrollArea>
               </TabsContent>
+
+              {/* AGENTS TAB — only for events that use agents */}
+              {agents && (
+                <TabsContent value="agents" className="flex-1 m-0 overflow-hidden">
+                  <AgentsAnalyticsPanel
+                    agents={agents}
+                    search={searchQuery}
+                    formatPrice={formatPrice}
+                  />
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </div>

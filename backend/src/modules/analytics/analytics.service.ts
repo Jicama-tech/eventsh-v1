@@ -77,6 +77,24 @@ export interface AgentBreakdown {
   viaAgents: { bookings: number; revenue: number };
   /** Bookings with no agent credited. */
   direct: { bookings: number; revenue: number };
+  /** Every booking credited to an agent, paid or not. */
+  bookings: AgentBooking[];
+}
+
+export interface AgentBooking {
+  agentId: string;
+  agentName: string;
+  section: SectionKeyName;
+  customer: string;
+  item: string;
+  /** What was booked for. */
+  amount: number;
+  status: string;
+  /** Paid and so counted in the agent's revenue. */
+  counted: boolean;
+  /** Revenue counted for this booking (0 if not yet paid). */
+  revenue: number;
+  date: string | Date | null;
 }
 
 /**
@@ -227,51 +245,112 @@ export class AnalyticsService {
       }
     };
 
+    const bookings: AgentBooking[] = [];
+    // Every agent-credited booking is listed (paid or not); only paid ones
+    // (`revenue` != null) count toward the agent's totals.
+    const record = (
+      key: SectionKeyName,
+      doc: any,
+      revenue: number | null,
+      info: { customer: any; item: any; amount: any; status: any; date: any },
+    ) => {
+      if (revenue != null) credit(key, doc, revenue);
+      const id = doc?.referralAgentId ? String(doc.referralAgentId) : "";
+      if (!id) return;
+      bookings.push({
+        agentId: id,
+        agentName: rowFor(id, String(doc.referralAgentName || "")).name,
+        section: key,
+        customer: String(info.customer || ""),
+        item: String(info.item || ""),
+        amount: n(info.amount),
+        status: String(info.status || ""),
+        counted: revenue != null,
+        revenue: revenue ?? 0,
+        date: info.date || doc.createdAt || null,
+      });
+    };
+
     for (const t of data.tickets) {
-      if (
-        String(t.ticketId || "").startsWith("WS-") ||
-        String(t.status) === "cancelled" ||
-        !t.paymentConfirmed
-      ) {
-        continue;
-      }
-      credit("visitors", t, n(t.totalAmount));
+      if (String(t.ticketId || "").startsWith("WS-")) continue;
+      const ok = String(t.status) !== "cancelled" && !!t.paymentConfirmed;
+      record("visitors", t, ok ? n(t.totalAmount) : null, {
+        customer: t.customerName,
+        item: (t.ticketDetails || [])
+          .map((d: any) => `${d.ticketType || "Ticket"} x${n(d.quantity) || 1}`)
+          .join("; "),
+        amount: t.totalAmount,
+        status: `${t.paymentConfirmed ? "Paid" : "Unpaid"} / ${t.status || ""}`,
+        date: t.purchaseDate,
+      });
     }
     for (const s of data.stalls) {
-      if (String(s.paymentStatus) !== "Paid" || String(s.status) === "Cancelled") continue;
-      credit("exhibitors", s, n(s.grandTotal));
+      const ok = String(s.paymentStatus) === "Paid" && String(s.status) !== "Cancelled";
+      record("exhibitors", s, ok ? n(s.grandTotal) : null, {
+        customer: s.brandName || s.nameOfApplicant,
+        item: (s.selectedTables || [])
+          .map((t: any) => t.name || t.tableName || "Space")
+          .join("; "),
+        amount: s.grandTotal,
+        status: `${s.paymentStatus || "Unpaid"} / ${s.status || ""}`,
+        date: s.requestDate,
+      });
     }
     for (const r of data.rounds) {
-      if (String(r.paymentStatus) !== "Paid") continue;
-      credit("roundTables", r, n(r.amount));
+      record("roundTables", r, String(r.paymentStatus) === "Paid" ? n(r.amount) : null, {
+        customer: r.visitorName,
+        item: r.tableName,
+        amount: r.amount,
+        status: r.paymentStatus,
+        date: null,
+      });
     }
     for (const w of data.workshops) {
-      if (String(w.paymentStatus) !== "Paid") continue;
-      credit("workshops", w, n(w.amount));
+      record("workshops", w, String(w.paymentStatus) === "Paid" ? n(w.amount) : null, {
+        customer: w.visitorName,
+        item: w.itemName,
+        amount: w.amount,
+        status: w.paymentStatus,
+        date: null,
+      });
     }
     for (const r of data.scheduled) {
-      if (
-        !["Paid", "Partial"].includes(String(r.paymentStatus)) ||
-        ["Cancelled", "Rejected"].includes(String(r.status))
-      ) {
-        continue;
-      }
       const slots: any[] = r.selectedSlots || [];
       const full = slots.reduce((a, x) => a + n(x.price), 0) || n(r.slotsTotal);
+      const ok =
+        ["Paid", "Partial"].includes(String(r.paymentStatus)) &&
+        !["Cancelled", "Rejected"].includes(String(r.status));
       const share =
         String(r.paymentStatus) === "Paid" || full === 0
           ? 1
           : Math.min(1, n(r.paidAmount) / full);
-      credit("scheduledSpaces", r, full * share);
+      record("scheduledSpaces", r, ok ? full * share : null, {
+        customer: r.name,
+        item: slots.map((x) => x.spaceName || "Space").join("; "),
+        amount: full,
+        status: `${r.paymentStatus || ""} / ${r.status || ""}`,
+        date: null,
+      });
     }
     for (const s of data.speakers) {
-      if (!["Confirmed", "Completed"].includes(String(s.status))) continue;
-      credit(
+      const ok = ["Confirmed", "Completed"].includes(String(s.status));
+      record(
         "speakers",
         s,
-        s.isCharged && String(s.paymentStatus) === "Paid" ? n(s.fee) : 0,
+        ok ? (s.isCharged && String(s.paymentStatus) === "Paid" ? n(s.fee) : 0) : null,
+        {
+          customer: s.name,
+          item: s.selectedSlotName,
+          amount: s.isCharged ? s.fee : 0,
+          status: `${s.paymentStatus || ""} / ${s.status || ""}`,
+          date: null,
+        },
       );
     }
+    bookings.sort(
+      (x, y) => String(x.agentName).localeCompare(String(y.agentName)) ||
+        new Date(y.date || 0).getTime() - new Date(x.date || 0).getTime(),
+    );
 
     if (agentDocs.length === 0 && rows.size === 0) return null;
     const agents = [...rows.values()].sort(
@@ -281,7 +360,7 @@ export class AnalyticsService {
       bookings: agents.reduce((a, x) => a + x.bookings, 0),
       revenue: agents.reduce((a, x) => a + x.revenue, 0),
     };
-    return { agents, viaAgents, direct };
+    return { agents, viaAgents, direct, bookings };
   }
 
   private platformFeeFor(
@@ -654,31 +733,31 @@ export class AnalyticsService {
       (await Promise.all([
         this.ticketModel
           .find(byEvent)
-          .select("ticketId ticketDetails totalAmount paymentConfirmed status referralAgentId referralAgentName")
+          .select("ticketId ticketDetails totalAmount paymentConfirmed status customerName purchaseDate referralAgentId referralAgentName")
           .lean(),
         this.stallModel
           .find(byEvent)
           .select(
-            "status paymentStatus selectedTables selectedAddOns tablesTotal depositTotal addOnsTotal grandTotal referralAgentId referralAgentName",
+            "status paymentStatus selectedTables selectedAddOns tablesTotal depositTotal addOnsTotal grandTotal brandName nameOfApplicant requestDate referralAgentId referralAgentName",
           )
           .lean(),
         this.roundTableModel
           .find(byEvent)
           .select(
-            "tablePositionId tableName sellingMode isWholeTable numberOfSeats selectedChairIndices amount paymentStatus referralAgentId referralAgentName",
+            "tablePositionId tableName sellingMode isWholeTable numberOfSeats selectedChairIndices amount paymentStatus visitorName createdAt referralAgentId referralAgentName",
           )
           .lean(),
         this.workshopBookingModel
           .find(byEvent)
-          .select("bookingType sessionId packageId itemName quantity amount paymentStatus referralAgentId referralAgentName")
+          .select("bookingType sessionId packageId itemName quantity amount paymentStatus visitorName createdAt referralAgentId referralAgentName")
           .lean(),
         this.scheduledSpaceRequestModel
           .find(byEvent)
-          .select("status paymentStatus selectedSlots slotsTotal paidAmount referralAgentId referralAgentName")
+          .select("status paymentStatus selectedSlots slotsTotal paidAmount name createdAt referralAgentId referralAgentName")
           .lean(),
         this.speakerModel
           .find(byEvent)
-          .select("selectedSlotId selectedSlotName status isCharged fee paymentStatus referralAgentId referralAgentName")
+          .select("selectedSlotId selectedSlotName status isCharged fee paymentStatus name createdAt referralAgentId referralAgentName")
           .lean(),
         this.sponsorModel
           .find(byEvent)
