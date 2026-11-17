@@ -211,36 +211,81 @@ export function buildEventReportCsv(
 function pushAgentRows(
   rows: Cell[][],
   ag: AgentBreakdown | null | undefined,
-  keys: AgentSectionKey[],
-  label: (k: string) => string,
+  fallbackKeys: AgentSectionKey[],
+  fallbackLabel: (k: string) => string,
 ) {
   if (!ag || ag.agents.length + ag.direct.bookings === 0) return;
   const date = (d: any) => (d ? new Date(d).toLocaleDateString() : "");
+
+  // Only the sections this event has. Older backends don't send them, so fall
+  // back to whichever sections actually have agent or direct sales.
+  const sections: { key: AgentSectionKey; label: string; total: number | null }[] =
+    ag.sections && ag.sections.length > 0
+      ? ag.sections.map((s) => ({ key: s.key, label: s.label, total: s.total }))
+      : fallbackKeys
+          .filter(
+            (k) =>
+              ag.agents.some((a) => (a.bySection[k]?.units ?? 0) > 0) ||
+              (ag.direct.bySection?.[k]?.units ?? 0) > 0,
+          )
+          .map((k) => ({ key: k, label: fallbackLabel(k), total: null }));
+  const label = (k: string) => sections.find((s) => s.key === k)?.label || fallbackLabel(k);
   const grand = ag.viaAgents.units + ag.direct.units;
-  rows.push(["AGENT PERFORMANCE"]);
+
+  // Totals: what the event has, what sold, and how much of it agents sold.
+  rows.push(["AGENT SUMMARY"]);
+  rows.push(["Section", "Total available", "Total sold", "Sold by agents", "Sold direct", "% sold by agents", "% of total available sold"]);
+  let availSum = 0;
+  let availKnown = false;
+  for (const sec of sections) {
+    const viaU = ag.agents.reduce((n, a) => n + (a.bySection[sec.key]?.units ?? 0), 0);
+    const directU = ag.direct.bySection?.[sec.key]?.units ?? 0;
+    const sold = viaU + directU;
+    if (sec.total != null) {
+      availSum += sec.total;
+      availKnown = true;
+    }
+    rows.push([
+      sec.label, sec.total ?? "-", sold, viaU, directU,
+      pctText(viaU, sold), sec.total != null ? pctText(sold, sec.total) : "-",
+    ]);
+  }
   rows.push([
-    "Rank", "Agent", "Referral code", "Active", "Sold (spaces/tickets/slots)", "Bookings", "Revenue", "% of all sold", "% of agent sales",
-    ...keys.flatMap((k) => [`${label(k)} sold`, `${label(k)} revenue`]),
+    "All sections", availKnown ? availSum : "-", grand, ag.viaAgents.units, ag.direct.units,
+    pctText(ag.viaAgents.units, grand), availKnown ? pctText(grand, availSum) : "-",
+  ]);
+  rows.push([]);
+
+  rows.push(["SOLD BY EACH AGENT"]);
+  rows.push([
+    "Rank", "Agent", "Referral code", "Active", "Total sold", "Bookings", "Revenue", "% of all sold", "% of agent sales",
+    ...sections.flatMap((s) => [`${s.label} sold`, `${s.label} revenue`]),
   ]);
   ag.agents.forEach((a, i) => {
     rows.push([
       i + 1, a.name, a.code, a.isActive ? "Yes" : "No", a.units, a.bookings, money(a.revenue),
       pctText(a.units, grand), pctText(a.units, ag.viaAgents.units),
-      ...keys.flatMap((k) => [a.bySection[k]?.units ?? 0, money(a.bySection[k]?.revenue ?? 0)]),
+      ...sections.flatMap((s) => [a.bySection[s.key]?.units ?? 0, money(a.bySection[s.key]?.revenue ?? 0)]),
     ]);
   });
-  rows.push(["", "Total via agents", "", "", ag.viaAgents.units, ag.viaAgents.bookings, money(ag.viaAgents.revenue), pctText(ag.viaAgents.units, grand), ag.viaAgents.units > 0 ? "100%" : "—"]);
-  rows.push(["", "Direct (no agent)", "", "", ag.direct.units, ag.direct.bookings, money(ag.direct.revenue), pctText(ag.direct.units, grand)]);
+  rows.push([
+    "", "Total via agents", "", "", ag.viaAgents.units, ag.viaAgents.bookings, money(ag.viaAgents.revenue),
+    pctText(ag.viaAgents.units, grand), ag.viaAgents.units > 0 ? "100%" : "-",
+  ]);
+  rows.push([
+    "", "Direct (no agent)", "", "", ag.direct.units, ag.direct.bookings, money(ag.direct.revenue),
+    pctText(ag.direct.units, grand),
+  ]);
   rows.push([]);
 
-  // Paid or not; "Counted in revenue" says which are in the totals above.
+  // Sold bookings only: paid or free. Unpaid, cancelled and rejected are left out.
   if (ag.bookings?.length) {
     rows.push(["AGENT BOOKINGS"]);
-    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Units", "Amount", "Status", "Sold", "Revenue"]);
+    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Units", "Amount", "Status", "Revenue"]);
     for (const k of ag.bookings) {
       rows.push([
         k.agentName, date(k.date), label(k.section), k.customer, k.item,
-        k.units, money(k.amount), k.status, k.counted ? "Yes" : "No", money(k.revenue),
+        k.units, money(k.amount), k.status, money(k.revenue),
       ]);
     }
     rows.push([]);
@@ -266,6 +311,7 @@ export function buildAgentsCsv(
     ["Agent Report", eventTitle],
     ["Generated", new Date().toLocaleString()],
     ["Amounts in", currencyCode],
+    ["Counts sold bookings only (paid or free); unpaid and cancelled are not included."],
     [],
   ];
   pushAgentRows(
@@ -274,5 +320,5 @@ export function buildAgentsCsv(
     Object.keys(AGENT_SECTION_LABELS) as AgentSectionKey[],
     (k) => AGENT_SECTION_LABELS[k as AgentSectionKey] || k,
   );
-  return "﻿" + toCsv(rows);
+  return "\ufeff" + toCsv(rows);
 }

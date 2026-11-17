@@ -89,14 +89,30 @@ export interface AgentRow {
   bySection: Partial<Record<AgentSectionKey, { bookings: number; units: number; revenue: number }>>;
 }
 
+/** A section the event sells, with how much of it there is in total. */
+export interface AgentSectionInfo {
+  key: AgentSectionKey;
+  label: string;
+  /** Total spaces / tickets / slots available; null = unlimited or not tracked. */
+  total: number | null;
+  unit: string;
+}
+
 /** Bookings and revenue by the event agent they came through. */
 export interface AgentBreakdown {
+  /** Only the sections this event has. Missing on older backends. */
+  sections?: AgentSectionInfo[];
   /** Best performer first; agents with no bookings are included. */
   agents: AgentRow[];
   viaAgents: { bookings: number; units: number; revenue: number };
   /** Bookings with no agent credited. */
-  direct: { bookings: number; units: number; revenue: number };
-  /** Every booking credited to an agent, paid or not. */
+  direct: {
+    bookings: number;
+    units: number;
+    revenue: number;
+    bySection?: Partial<Record<AgentSectionKey, { bookings: number; units: number; revenue: number }>>;
+  };
+  /** Sold bookings credited to an agent - paid or free, never unpaid or cancelled. */
   bookings: AgentBooking[];
 }
 

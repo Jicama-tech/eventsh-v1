@@ -1,5 +1,5 @@
 // Infographic PDF for the Scheduled Spaces analytics: KPI cards, slot status,
-// occupancy by facility type and by date, every space, and - when bookings
+// occupancy by facility type, every space, and - when bookings
 // came through event agents - agent graphs (slots sold per agent, share of
 // agent sales, money alongside). Data is the payload of
 // GET /scheduled-spaces/analytics/:eventId.
@@ -186,46 +186,6 @@ export function buildScheduledSpacesPdf(
       );
     }
     y += 4;
-  }
-
-  // ── By date (vertical bars) ────────────────────────────────────────────
-  const dates: any[] = (data.byDate || []).slice(0, 24);
-  if (dates.length > 0) {
-    heading("Occupancy by date", "Share of each day's seats that are booked.");
-    const chartH = 90;
-    need(chartH + 48);
-    y += 10;
-    const gap = 6;
-    const bw = Math.min(34, (W - gap * (dates.length - 1)) / dates.length);
-    const totalW = bw * dates.length + gap * (dates.length - 1);
-    const x0 = margin + (W - totalW) / 2;
-    dates.forEach((d, i) => {
-      const pct = d.capacity > 0 ? d.booked / d.capacity : 0;
-      const bx = x0 + i * (bw + gap);
-      fill(LIGHT);
-      doc.roundedRect(bx, y, bw, chartH, 3, 3, "F");
-      if (pct > 0) {
-        fill(pct >= 1 ? RED : pct > 0.5 ? AMBER : BLUE);
-        const h = Math.max(3, pct * chartH);
-        doc.roundedRect(bx, y + chartH - h, bw, h, 3, 3, "F");
-      }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
-      text(INK);
-      doc.text(`${Math.round(pct * 100)}%`, bx + bw / 2, y - 2, { align: "center" });
-      doc.setFont("helvetica", "normal");
-      text(GRAY);
-      const dd = new Date(`${d.date}T00:00:00`);
-      doc.text(
-        Number.isNaN(dd.getTime())
-          ? String(d.date)
-          : dd.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
-        bx + bw / 2,
-        y + chartH + 10,
-        { align: "center" },
-      );
-    });
-    y += chartH + 26;
   }
 
   // ── Every space ────────────────────────────────────────────────────────
