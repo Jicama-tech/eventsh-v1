@@ -216,31 +216,31 @@ function pushAgentRows(
 ) {
   if (!ag || ag.agents.length + ag.direct.bookings === 0) return;
   const date = (d: any) => (d ? new Date(d).toLocaleDateString() : "");
-  const grand = ag.viaAgents.revenue + ag.direct.revenue;
+  const grand = ag.viaAgents.units + ag.direct.units;
   rows.push(["AGENT PERFORMANCE"]);
   rows.push([
-    "Rank", "Agent", "Referral code", "Active", "Bookings", "Revenue", "% of booking revenue", "% of agent sales",
-    ...keys.flatMap((k) => [`${label(k)} bookings`, `${label(k)} revenue`]),
+    "Rank", "Agent", "Referral code", "Active", "Sold (spaces/tickets/slots)", "Bookings", "Revenue", "% of all sold", "% of agent sales",
+    ...keys.flatMap((k) => [`${label(k)} sold`, `${label(k)} revenue`]),
   ]);
   ag.agents.forEach((a, i) => {
     rows.push([
-      i + 1, a.name, a.code, a.isActive ? "Yes" : "No", a.bookings, money(a.revenue),
-      pctText(a.revenue, grand), pctText(a.revenue, ag.viaAgents.revenue),
-      ...keys.flatMap((k) => [a.bySection[k]?.bookings ?? 0, money(a.bySection[k]?.revenue ?? 0)]),
+      i + 1, a.name, a.code, a.isActive ? "Yes" : "No", a.units, a.bookings, money(a.revenue),
+      pctText(a.units, grand), pctText(a.units, ag.viaAgents.units),
+      ...keys.flatMap((k) => [a.bySection[k]?.units ?? 0, money(a.bySection[k]?.revenue ?? 0)]),
     ]);
   });
-  rows.push(["", "Total via agents", "", "", ag.viaAgents.bookings, money(ag.viaAgents.revenue), pctText(ag.viaAgents.revenue, grand), ag.viaAgents.revenue > 0 ? "100%" : "—"]);
-  rows.push(["", "Direct (no agent)", "", "", ag.direct.bookings, money(ag.direct.revenue), pctText(ag.direct.revenue, grand)]);
+  rows.push(["", "Total via agents", "", "", ag.viaAgents.units, ag.viaAgents.bookings, money(ag.viaAgents.revenue), pctText(ag.viaAgents.units, grand), ag.viaAgents.units > 0 ? "100%" : "—"]);
+  rows.push(["", "Direct (no agent)", "", "", ag.direct.units, ag.direct.bookings, money(ag.direct.revenue), pctText(ag.direct.units, grand)]);
   rows.push([]);
 
   // Paid or not; "Counted in revenue" says which are in the totals above.
   if (ag.bookings?.length) {
     rows.push(["AGENT BOOKINGS"]);
-    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Amount", "Status", "Counted in revenue", "Revenue"]);
+    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Units", "Amount", "Status", "Sold", "Revenue"]);
     for (const k of ag.bookings) {
       rows.push([
         k.agentName, date(k.date), label(k.section), k.customer, k.item,
-        money(k.amount), k.status, k.counted ? "Yes" : "No", money(k.revenue),
+        k.units, money(k.amount), k.status, k.counted ? "Yes" : "No", money(k.revenue),
       ]);
     }
     rows.push([]);
