@@ -59,6 +59,7 @@ import {
 import { buildEventReportCsv } from "@/lib/eventReportCsv";
 import {
   agentsPdfHeight,
+  drawAgentBookingsPdf,
   drawAgentsPdf,
   drawExpensesTable,
   drawSectionTable,
@@ -1443,6 +1444,14 @@ export default function DashboardOverview({
           width: innerW,
           money: pdfPrice,
         });
+        if (report.agents.bookings?.length) {
+          y = drawAgentBookingsPdf(
+            doc,
+            report.agents,
+            (k) => sections.find((s) => s.key === k)?.label || k,
+            { x: margin, y: y + 10, width: innerW, money: pdfPrice, pageBreak },
+          );
+        }
       }
 
       // Logged expenses — approved ones come off the revenue below.

@@ -156,6 +156,20 @@ export function buildEventReportCsv(
     blank();
   }
 
+  // Every booking made through an agent, paid or not (Counted = in revenue).
+  if (ag && ag.bookings && ag.bookings.length > 0) {
+    const label = (k: string) => report.sections.find((s) => s.key === k)?.label || k;
+    rows.push(["AGENT BOOKINGS"]);
+    rows.push(["Agent", "Date", "Section", "Customer", "Booked", "Amount", "Status", "Counted in revenue", "Revenue"]);
+    for (const k of ag.bookings) {
+      rows.push([
+        k.agentName, date(k.date), label(k.section), k.customer, k.item,
+        money(k.amount), k.status, k.counted ? "Yes" : "No", money(k.revenue),
+      ]);
+    }
+    blank();
+  }
+
   const ex = report.expenses;
   if (ex && ex.items.length > 0) {
     rows.push(["EXPENSES"]);
