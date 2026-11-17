@@ -33,9 +33,13 @@ export function AgentsAnalyticsPanel({
   search: string;
   formatPrice: (v: number) => string;
 }) {
-  const total = agents.viaAgents.revenue + agents.direct.revenue;
-  const pct = total > 0 ? (agents.viaAgents.revenue / total) * 100 : 0;
-  const via = agents.viaAgents.revenue;
+  // Shares go by units sold (spaces / tickets / slots) so free sales count;
+  // the money is shown next to them.
+  const total = agents.viaAgents.units + agents.direct.units;
+  const pct = total > 0 ? (agents.viaAgents.units / total) * 100 : 0;
+  const via = agents.viaAgents.units;
+  const withMoney = (units: number, revenue: number) =>
+    revenue > 0 ? `${units} sold · ${formatPrice(revenue)}` : `${units} sold`;
   const q = search.toLowerCase();
   const bookings = (agents.bookings || []).filter((k) =>
     `${k.agentName} ${k.customer} ${k.item}`.toLowerCase().includes(q),
@@ -47,12 +51,10 @@ export function AgentsAnalyticsPanel({
         <div className="rounded-xl border p-4">
           <div className="flex flex-wrap justify-between gap-2 text-xs font-bold mb-2">
             <span className="text-indigo-600">
-              Via agents: {formatPrice(agents.viaAgents.revenue)} ·{" "}
-              {agents.viaAgents.bookings} bookings ({pctText(via, total)})
+              Via agents: {withMoney(via, agents.viaAgents.revenue)} ({pctText(via, total)})
             </span>
             <span className="text-muted-foreground">
-              Direct: {formatPrice(agents.direct.revenue)} ·{" "}
-              {agents.direct.bookings} bookings ({pctText(agents.direct.revenue, total)})
+              Direct: {withMoney(agents.direct.units, agents.direct.revenue)} ({pctText(agents.direct.units, total)})
             </span>
           </div>
           <div className="h-3 rounded-full bg-muted overflow-hidden">
@@ -77,30 +79,32 @@ export function AgentsAnalyticsPanel({
                     </Badge>
                   )}
                 </div>
-                <div className="text-sm font-black text-green-600">
-                  {formatPrice(a.revenue)}{" "}
-                  <span className="text-xs font-medium text-muted-foreground">
-                    · {a.bookings} paid
-                  </span>
+                <div className="text-sm font-black">
+                  {a.units} sold
+                  {a.revenue > 0 && (
+                    <span className="ml-2 text-green-600">
+                      {formatPrice(a.revenue)}
+                    </span>
+                  )}
                   <span className="ml-2 text-xs font-bold text-indigo-600">
-                    {pctText(a.revenue, via)} of agent sales
+                    {pctText(a.units, via)} of agent sales
                   </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {pctText(a.revenue, total)} of booking revenue
+                  <span className="ml-2 text-xs font-medium text-muted-foreground">
+                    {pctText(a.units, total)} of all sold
                   </span>
                 </div>
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden mb-2">
                 <div
                   className="h-full bg-indigo-500"
-                  style={{ width: `${via > 0 ? (a.revenue / via) * 100 : 0}%` }}
+                  style={{ width: `${via > 0 ? (a.units / via) * 100 : 0}%` }}
                 />
               </div>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(a.bySection).map(([k, v]) => (
                   <Badge key={k} variant="secondary" className="text-[10px]">
-                    {SECTION_NAMES[k] || k}: {v!.bookings} ·{" "}
-                    {formatPrice(v!.revenue)}
+                    {SECTION_NAMES[k] || k}: {v!.units} sold
+                    {v!.revenue > 0 ? ` · ${formatPrice(v!.revenue)}` : ""}
                   </Badge>
                 ))}
               </div>

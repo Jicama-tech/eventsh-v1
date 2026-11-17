@@ -67,16 +67,18 @@ export interface AgentRow {
   isActive: boolean;
   bookings: number;
   revenue: number;
-  bySection: Partial<Record<SectionKeyName, { bookings: number; revenue: number }>>;
+  /** Spaces / tickets / slots sold through this agent (free ones included). */
+  units: number;
+  bySection: Partial<Record<SectionKeyName, { bookings: number; units: number; revenue: number }>>;
 }
 
 /** Bookings and revenue by the agent they came through. */
 export interface AgentBreakdown {
   /** Best performer first. Agents with no bookings are listed too. */
   agents: AgentRow[];
-  viaAgents: { bookings: number; revenue: number };
+  viaAgents: { bookings: number; units: number; revenue: number };
   /** Bookings with no agent credited. */
-  direct: { bookings: number; revenue: number };
+  direct: { bookings: number; units: number; revenue: number };
   /** Every booking credited to an agent, paid or not. */
   bookings: AgentBooking[];
 }
@@ -90,8 +92,10 @@ export interface AgentBooking {
   /** What was booked for. */
   amount: number;
   status: string;
-  /** Paid and so counted in the agent's revenue. */
+  /** Sold (holds a space / ticket / slot, free ones included). */
   counted: boolean;
+  /** Spaces / tickets / slots in this booking (0 if not sold). */
+  units: number;
   /** Revenue counted for this booking (0 if not yet paid). */
   revenue: number;
   date: string | Date | null;
@@ -216,6 +220,7 @@ export class AnalyticsService {
           code: "",
           isActive: false,
           bookings: 0,
+          units: 0,
           revenue: 0,
           bySection: {},
         };
@@ -229,32 +234,37 @@ export class AnalyticsService {
       r.code = String(a.referralCode || "");
       r.isActive = a.isActive !== false;
     }
-    const direct = { bookings: 0, revenue: 0 };
+    const direct = { bookings: 0, units: 0, revenue: 0 };
 
-    const credit = (key: SectionKeyName, doc: any, revenue: number) => {
+    const credit = (key: SectionKeyName, doc: any, units: number, revenue: number) => {
       const id = doc?.referralAgentId ? String(doc.referralAgentId) : "";
       // A booking credited to an operator code (no agent) counts as direct.
       const target = id ? rowFor(id, String(doc.referralAgentName || "")) : null;
       const bucket = target ?? direct;
       bucket.bookings += 1;
+      bucket.units += units;
       bucket.revenue += revenue;
       if (target) {
-        const sec = (target.bySection[key] ||= { bookings: 0, revenue: 0 });
+        const sec = (target.bySection[key] ||= { bookings: 0, units: 0, revenue: 0 });
         sec.bookings += 1;
+        sec.units += units;
         sec.revenue += revenue;
       }
     };
 
     const bookings: AgentBooking[] = [];
-    // Every agent-credited booking is listed (paid or not); only paid ones
-    // (`revenue` != null) count toward the agent's totals.
+    // Every agent-credited booking is listed. A booking is "sold" when it
+    // holds a space / ticket / slot — free ones included, so an agent who
+    // sells free spaces still shows up. Revenue is only the money received.
     const record = (
       key: SectionKeyName,
       doc: any,
-      revenue: number | null,
+      sold: boolean,
+      units: number,
+      revenue: number,
       info: { customer: any; item: any; amount: any; status: any; date: any },
     ) => {
-      if (revenue != null) credit(key, doc, revenue);
+      if (sold) credit(key, doc, units, revenue);
       const id = doc?.referralAgentId ? String(doc.referralAgentId) : "";
       if (!id) return;
       bookings.push({
@@ -265,28 +275,32 @@ export class AnalyticsService {
         item: String(info.item || ""),
         amount: n(info.amount),
         status: String(info.status || ""),
-        counted: revenue != null,
-        revenue: revenue ?? 0,
+        counted: sold,
+        units: sold ? units : 0,
+        revenue: sold ? revenue : 0,
         date: info.date || doc.createdAt || null,
       });
     };
 
     for (const t of data.tickets) {
       if (String(t.ticketId || "").startsWith("WS-")) continue;
-      const ok = String(t.status) !== "cancelled" && !!t.paymentConfirmed;
-      record("visitors", t, ok ? n(t.totalAmount) : null, {
+      const qty = (t.ticketDetails || []).reduce((a: number, d: any) => a + (n(d.quantity) || 1), 0) || 1;
+      const sold = String(t.status) !== "cancelled" && (!!t.paymentConfirmed || n(t.totalAmount) <= 0);
+      record("visitors", t, sold, qty, t.paymentConfirmed ? n(t.totalAmount) : 0, {
         customer: t.customerName,
         item: (t.ticketDetails || [])
           .map((d: any) => `${d.ticketType || "Ticket"} x${n(d.quantity) || 1}`)
           .join("; "),
         amount: t.totalAmount,
-        status: `${t.paymentConfirmed ? "Paid" : "Unpaid"} / ${t.status || ""}`,
+        status: `${t.paymentConfirmed ? "Paid" : n(t.totalAmount) <= 0 ? "Free" : "Unpaid"} / ${t.status || ""}`,
         date: t.purchaseDate,
       });
     }
     for (const s of data.stalls) {
-      const ok = String(s.paymentStatus) === "Paid" && String(s.status) !== "Cancelled";
-      record("exhibitors", s, ok ? n(s.grandTotal) : null, {
+      const spaces = (s.selectedTables || []).length || 1;
+      const sold = ["Processing", "Confirmed", "Completed"].includes(String(s.status));
+      const paid = String(s.paymentStatus) === "Paid" && String(s.status) !== "Cancelled";
+      record("exhibitors", s, sold, spaces, paid ? n(s.grandTotal) : 0, {
         customer: s.brandName || s.nameOfApplicant,
         item: (s.selectedTables || [])
           .map((t: any) => t.name || t.tableName || "Space")
@@ -297,7 +311,8 @@ export class AnalyticsService {
       });
     }
     for (const r of data.rounds) {
-      record("roundTables", r, String(r.paymentStatus) === "Paid" ? n(r.amount) : null, {
+      const paid = String(r.paymentStatus) === "Paid";
+      record("roundTables", r, paid || n(r.amount) <= 0, 1, paid ? n(r.amount) : 0, {
         customer: r.visitorName,
         item: r.tableName,
         amount: r.amount,
@@ -306,7 +321,8 @@ export class AnalyticsService {
       });
     }
     for (const w of data.workshops) {
-      record("workshops", w, String(w.paymentStatus) === "Paid" ? n(w.amount) : null, {
+      const paid = String(w.paymentStatus) === "Paid";
+      record("workshops", w, paid || n(w.amount) <= 0, n(w.quantity) || 1, paid ? n(w.amount) : 0, {
         customer: w.visitorName,
         item: w.itemName,
         amount: w.amount,
@@ -317,27 +333,35 @@ export class AnalyticsService {
     for (const r of data.scheduled) {
       const slots: any[] = r.selectedSlots || [];
       const full = slots.reduce((a, x) => a + n(x.price), 0) || n(r.slotsTotal);
-      const ok =
-        ["Paid", "Partial"].includes(String(r.paymentStatus)) &&
-        !["Cancelled", "Rejected"].includes(String(r.status));
+      const alive = !["Cancelled", "Rejected"].includes(String(r.status));
+      const paidOk = ["Paid", "Partial"].includes(String(r.paymentStatus)) && alive;
       const share =
         String(r.paymentStatus) === "Paid" || full === 0
           ? 1
           : Math.min(1, n(r.paidAmount) / full);
-      record("scheduledSpaces", r, ok ? full * share : null, {
-        customer: r.name,
-        item: slots.map((x) => x.spaceName || "Space").join("; "),
-        amount: full,
-        status: `${r.paymentStatus || ""} / ${r.status || ""}`,
-        date: null,
-      });
+      record(
+        "scheduledSpaces",
+        r,
+        alive && (paidOk || full === 0),
+        slots.length || 1,
+        paidOk ? full * share : 0,
+        {
+          customer: r.name,
+          item: slots.map((x) => x.spaceName || "Space").join("; "),
+          amount: full,
+          status: `${r.paymentStatus || ""} / ${r.status || ""}`,
+          date: null,
+        },
+      );
     }
     for (const s of data.speakers) {
-      const ok = ["Confirmed", "Completed"].includes(String(s.status));
+      const sold = ["Confirmed", "Completed"].includes(String(s.status));
       record(
         "speakers",
         s,
-        ok ? (s.isCharged && String(s.paymentStatus) === "Paid" ? n(s.fee) : 0) : null,
+        sold,
+        1,
+        s.isCharged && String(s.paymentStatus) === "Paid" ? n(s.fee) : 0,
         {
           customer: s.name,
           item: s.selectedSlotName,
@@ -354,10 +378,11 @@ export class AnalyticsService {
 
     if (agentDocs.length === 0 && rows.size === 0) return null;
     const agents = [...rows.values()].sort(
-      (a, b) => b.revenue - a.revenue || b.bookings - a.bookings || a.name.localeCompare(b.name),
+      (a, b) => b.units - a.units || b.revenue - a.revenue || a.name.localeCompare(b.name),
     );
     const viaAgents = {
       bookings: agents.reduce((a, x) => a + x.bookings, 0),
+      units: agents.reduce((a, x) => a + x.units, 0),
       revenue: agents.reduce((a, x) => a + x.revenue, 0),
     };
     return { agents, viaAgents, direct, bookings };

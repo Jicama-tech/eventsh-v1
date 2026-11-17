@@ -82,17 +82,20 @@ export interface AgentRow {
   code: string;
   isActive: boolean;
   bookings: number;
+  /** Spaces / tickets / slots sold (free ones included) - what agents are ranked by. */
+  units: number;
+  /** Money received, shown alongside. */
   revenue: number;
-  bySection: Partial<Record<AgentSectionKey, { bookings: number; revenue: number }>>;
+  bySection: Partial<Record<AgentSectionKey, { bookings: number; units: number; revenue: number }>>;
 }
 
 /** Bookings and revenue by the event agent they came through. */
 export interface AgentBreakdown {
   /** Best performer first; agents with no bookings are included. */
   agents: AgentRow[];
-  viaAgents: { bookings: number; revenue: number };
+  viaAgents: { bookings: number; units: number; revenue: number };
   /** Bookings with no agent credited. */
-  direct: { bookings: number; revenue: number };
+  direct: { bookings: number; units: number; revenue: number };
   /** Every booking credited to an agent, paid or not. */
   bookings: AgentBooking[];
 }
@@ -106,7 +109,10 @@ export interface AgentBooking {
   amount: number;
   status: string;
   /** Paid, so counted in the agent's revenue. */
+  /** Sold: holds a space / ticket / slot (free ones included). */
   counted: boolean;
+  /** Spaces / tickets / slots in this booking (0 if not sold). */
+  units: number;
   revenue: number;
   date: string | null;
 }
@@ -503,8 +509,12 @@ export function drawAgentsPdf(
   y += 26;
 
   // via agents vs direct
-  const total = b.viaAgents.revenue + b.direct.revenue;
-  const pct = total > 0 ? b.viaAgents.revenue / total : 0;
+  // Shares are by units sold (spaces / tickets / slots), so free sales count;
+  // money is shown next to them.
+  const total = b.viaAgents.units + b.direct.units;
+  const pct = total > 0 ? b.viaAgents.units / total : 0;
+  const withMoney = (units: number, revenue: number) =>
+    revenue > 0 ? `${units} sold · ${money(revenue)}` : `${units} sold`;
   fill(LIGHT);
   doc.roundedRect(x, y, width, 14, 4, 4, "F");
   if (pct > 0) {
@@ -517,14 +527,14 @@ export function drawAgentsPdf(
   doc.circle(x + 4, y - 3, 3, "F");
   text(INK);
   doc.text(
-    `Via agents: ${money(b.viaAgents.revenue)} · ${b.viaAgents.bookings} bookings (${pctText(b.viaAgents.revenue, total)})`,
+    `Via agents: ${withMoney(b.viaAgents.units, b.viaAgents.revenue)} (${pctText(b.viaAgents.units, total)})`,
     x + 12,
     y,
   );
   fill(SLATE);
   doc.circle(x + width * 0.55, y - 3, 3, "F");
   doc.text(
-    `Direct: ${money(b.direct.revenue)} · ${b.direct.bookings} bookings (${pctText(b.direct.revenue, total)})`,
+    `Direct: ${withMoney(b.direct.units, b.direct.revenue)} (${pctText(b.direct.units, total)})`,
     x + width * 0.55 + 8,
     y,
   );
@@ -532,7 +542,7 @@ export function drawAgentsPdf(
 
   const shown = b.agents.slice(0, 12);
   // Bars are each agent's share of agent sales, so bar length = the %.
-  const max = Math.max(1, b.viaAgents.revenue);
+  const max = Math.max(1, b.viaAgents.units);
   const nameW = width * 0.3;
   const barX = x + nameW + 6;
   const barW = width - nameW - 6 - 210;
@@ -544,14 +554,14 @@ export function drawAgentsPdf(
     doc.text(clip, x, y + 9);
     fill(LIGHT);
     doc.roundedRect(barX, y, barW, 12, 3, 3, "F");
-    if (a.revenue > 0) {
+    if (a.units > 0) {
       fill(INDIGO);
-      doc.roundedRect(barX, y, Math.max(4, (a.revenue / max) * barW), 12, 3, 3, "F");
+      doc.roundedRect(barX, y, Math.max(4, (a.units / max) * barW), 12, 3, 3, "F");
     }
     doc.setFont("helvetica", "normal");
     text(GRAY);
     doc.text(
-      `${money(a.revenue)} · ${a.bookings} booking${a.bookings === 1 ? "" : "s"} · ${pctText(a.revenue, b.viaAgents.revenue)} of agent sales`,
+      `${withMoney(a.units, a.revenue)} · ${pctText(a.units, b.viaAgents.units)} of agent sales`,
       x + width,
       y + 9,
       { align: "right" },
