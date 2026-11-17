@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -126,8 +127,9 @@ export class ScheduledSpacesController {
   async updateStatus(
     @Param("id") id: string,
     @Body() dto: UpdateScheduledSpaceStatusDto,
+    @Headers("authorization") authHeader?: string,
   ) {
-    return await this.scheduledSpacesService.updateStatus(id, dto);
+    return await this.scheduledSpacesService.updateStatus(id, dto, authHeader);
   }
 
   @Post("scan-qr")

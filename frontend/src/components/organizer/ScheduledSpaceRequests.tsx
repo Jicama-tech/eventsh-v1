@@ -136,7 +136,13 @@ const ScheduledSpaceRequests = ({
         `${apiURL}/scheduled-spaces/${selected._id}/status`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // The server reads who is cancelling from this token for the timeline.
+            ...(sessionStorage.getItem("token")
+              ? { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+              : {}),
+          },
           body: JSON.stringify({
             status,
             notes: status === "Confirmed" ? reasonOrNote : undefined,
@@ -149,6 +155,7 @@ const ScheduledSpaceRequests = ({
         },
       );
       const result = await res.json();
+      if (!res.ok && !result.success) throw new Error(result.message);
       if (result.success) {
         refreshOne(result.data);
         await fetchRequests();
@@ -731,6 +738,41 @@ const ScheduledSpaceRequests = ({
                     ) : (
                       "Confirm Payment & Issue QR"
                     )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Paid and confirmed: delete (cancel) it and give the slot(s) back.
+                  The booking stays in the list as Cancelled and the timeline
+                  records who did it. */}
+              {selected.status === "Completed" && (
+                <div className="space-y-2 rounded-lg border border-red-200 bg-red-50/50 p-3">
+                  <Label htmlFor="delete-notes" className="text-xs">
+                    {t("Reason for deleting this booking (optional)")}
+                  </Label>
+                  <Textarea
+                    id="delete-notes"
+                    placeholder={t("Why is this paid booking being cancelled?")}
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    rows={2}
+                    disabled={busy}
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-300 text-red-600 hover:text-red-700"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Delete this paid and confirmed booking? It will be cancelled and its slot(s) released. Refunding the registrant is handled separately.",
+                        )
+                      ) {
+                        updateStatus("Cancelled", cancelReason.trim() || undefined);
+                      }
+                    }}
+                  >
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : "Delete Booking & Release Slots"}
                   </Button>
                 </div>
               )}

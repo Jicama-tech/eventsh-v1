@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { assertReferralIfRequired } from "../../common/referral-required.util";
 import {
@@ -11,6 +13,7 @@ import {
   EVENT_ENDED_MESSAGE,
 } from "../../common/event-timing.util";
 import { InjectModel } from "@nestjs/mongoose";
+import { JwtService } from "@nestjs/jwt";
 import { Model, Types } from "mongoose";
 import * as QRCode from "qrcode";
 import * as puppeteer from "puppeteer";
@@ -75,6 +78,7 @@ export class ScheduledSpacesService {
     private operatorsService: OperatorsService,
     // WhatsApp twin of the ticket email, from the organizer's own number.
     private readonly otpService: OtpService,
+    private readonly jwtService: JwtService,
   ) {}
 
   // A visitor registers and is immediately confirmed — no organizer approval
@@ -955,16 +959,86 @@ export class ScheduledSpacesService {
     return { success: true, data: request };
   }
 
+  /**
+   * Who is making this request, from the signed-in user's JWT - verified, not
+   * taken from a body field, so the name on the timeline is one the server
+   * established. Null when there is no usable token.
+   */
+  private resolveActor(authHeader?: string): {
+    name: string;
+    role: string;
+    organizerId: string;
+    isAdmin: boolean;
+    canManage: boolean;
+  } | null {
+    const raw = (authHeader || "").trim();
+    if (!raw.toLowerCase().startsWith("bearer ")) return null;
+    const token = raw.slice(7).trim();
+    if (!token) return null;
+    try {
+      const p: any = this.jwtService.verify(token, {
+        secret: process.env.JWT_ACCESS_SECRET || "your_jwt_access_secret",
+      });
+      const name = String(p?.name || p?.email || "").trim();
+      if (!name) return null;
+      const roles: string[] = Array.isArray(p?.roles) ? p.roles : [];
+      const isAdmin = roles.includes("admin");
+      const isOperator = !!p?.operatorId;
+      const isOrganizer = roles.includes("organizer");
+      return {
+        name,
+        role: isOperator ? "operator" : isOrganizer ? "organizer" : isAdmin ? "admin" : roles[0] || "user",
+        // Operators carry their parent organizer's id as `sub`.
+        organizerId: String(p?.sub || ""),
+        isAdmin,
+        // Organizers, their operators and admins manage bookings; a gate
+        // volunteer alone does not.
+        canManage: isAdmin || isOperator || isOrganizer,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   // Organizer approve/reject (Pending -> Confirmed/Rejected), or cancel a
-  // completed booking. Rejecting/cancelling frees any slots it had reserved.
-  async updateStatus(id: string, dto: UpdateScheduledSpaceStatusDto) {
+  // booking - including a paid and confirmed one. Rejecting/cancelling frees
+  // any slots (or head-count) it had reserved; the booking stays in the list
+  // as Cancelled so the timeline keeps who cancelled it and when.
+  async updateStatus(
+    id: string,
+    dto: UpdateScheduledSpaceStatusDto,
+    authHeader?: string,
+    // Server-side callers (the ComBox integration) act without a user token.
+    opts?: { trusted?: boolean },
+  ) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException("Invalid request id");
     }
     const request = await this.requestModel.findById(id);
     if (!request) throw new NotFoundException("Request not found");
 
+    const actor = this.resolveActor(authHeader);
+    const wasConfirmedPaid = request.status === ScheduledSpaceStatusEnum.Completed;
+    // A paid and confirmed booking is only cancelled by the organizer who
+    // owns the event, one of their operators, or an admin - never anonymously.
+    if (dto.status === "Cancelled" && wasConfirmedPaid && !opts?.trusted) {
+      if (!actor) {
+        throw new UnauthorizedException(
+          "Sign in as the organizer or an operator to cancel a confirmed booking.",
+        );
+      }
+      if (
+        !actor.canManage ||
+        (!actor.isAdmin && actor.organizerId !== String(request.organizerId))
+      ) {
+        throw new ForbiddenException(
+          "Only this event's organizer or their operators can cancel a confirmed booking.",
+        );
+      }
+    }
+
     const releasingStatuses = ["Rejected", "Cancelled"];
+    let released = false;
     // Not when it was already released: giving back a shared slot's seats is
     // a decrement, so a second Cancel must not take them twice.
     if (
@@ -973,6 +1047,28 @@ export class ScheduledSpacesService {
       request.selectedSlots?.length
     ) {
       await this.releaseSlots(request);
+      released = true;
+    }
+
+    const changedBy = actor
+      ? `${actor.name} (${actor.role})`
+      : (dto.changedBy || "").trim() || "Organizer";
+    let note = dto.notes || dto.cancellationReason;
+    if (dto.status === "Cancelled") {
+      const slotCount = (request.selectedSlots || []).length;
+      const persons = (request.selectedSlots || []).reduce(
+        (n: number, s: any) => n + (Number(s.persons) || 0),
+        0,
+      );
+      note = [
+        `${wasConfirmedPaid ? "Paid and confirmed booking" : "Booking"} cancelled by ${actor?.name || changedBy}`,
+        released
+          ? `${slotCount} slot${slotCount === 1 ? "" : "s"} released${persons > 0 ? ` (${persons} ${persons === 1 ? "person" : "people"})` : ""}`
+          : null,
+        dto.cancellationReason ? `Reason: ${dto.cancellationReason}` : null,
+      ]
+        .filter(Boolean)
+        .join(". ");
     }
 
     request.status = dto.status;
@@ -980,8 +1076,8 @@ export class ScheduledSpacesService {
     if (dto.notes) request.notes = dto.notes;
     request.statusHistory.push({
       status: dto.status as ScheduledSpaceStatusEnum,
-      note: dto.notes || dto.cancellationReason,
-      changedBy: dto.changedBy,
+      note,
+      changedBy,
       changedAt: new Date(),
     } as any);
     await request.save();

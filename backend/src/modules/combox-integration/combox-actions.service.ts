@@ -94,7 +94,7 @@ export class ComboxActionsService {
           return this.scheduled.confirmPayment({ requestId: id, notes: notes || "Payment approved from ComBox.", changedBy: BY } as any);
         case "status":
           if (!["Confirmed", "Rejected", "Cancelled", "Completed"].includes(body?.status)) throw new BadRequestException("Choose Confirmed, Rejected, Cancelled or Completed.");
-          return this.scheduled.updateStatus(id, { status: body.status, cancellationReason: notes || undefined, changedBy: BY } as any);
+          return this.scheduled.updateStatus(id, { status: body.status, cancellationReason: notes || undefined, changedBy: BY } as any, undefined, { trusted: true });
         case "resend-ticket":
           return this.scheduled.resendTicket(id, BY);
         case "delete":
