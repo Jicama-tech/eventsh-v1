@@ -42,6 +42,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrency } from "@/hooks/useCurrencyhook";
 import { t } from "@/i18n/t";
+import { fetchEventReport, type AgentBreakdown } from "@/lib/eventReportPdf";
+import { AgentsAnalyticsPanel } from "./AgentsAnalyticsPanel";
 
 // --- Types ---
 interface TicketData {
@@ -76,6 +78,7 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [stalls, setStalls] = useState<StallData[]>([]);
   const [roundTables, setRoundTables] = useState<any[]>([]);
+  const [agents, setAgents] = useState<AgentBreakdown | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const { country } = useCountry();
@@ -118,6 +121,14 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
       }
     };
     fetchData();
+    // Agent performance comes from the event report; events without agents
+    // get null and no tab.
+    const token = sessionStorage.getItem("token");
+    fetchEventReport(
+      __API_URL__,
+      event._id,
+      token ? { Authorization: `Bearer ${token}` } : {},
+    ).then((r) => setAgents(r?.agents ?? null));
   }, [isOpen, event._id]);
 
   // --- Excel Export Function ---
@@ -334,6 +345,12 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                     value="stalls"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-purple-600 rounded-none bg-transparent px-0 font-bold"
                   >{t("Exhibitors/Stalls")}</TabsTrigger>
+                  {agents && (
+                    <TabsTrigger
+                      value="agents"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 rounded-none bg-transparent px-0 font-bold"
+                    >{t("Agents")}</TabsTrigger>
+                  )}
                 </TabsList>
 
                 <div className="flex items-center gap-3">
@@ -511,6 +528,17 @@ export function EventAnalyticsDialog({ event, isOpen, onClose }: any) {
                   </Table>
                 </ScrollArea>
               </TabsContent>
+
+              {/* AGENTS TAB — only for events that use agents */}
+              {agents && (
+                <TabsContent value="agents" className="flex-1 m-0 overflow-hidden">
+                  <AgentsAnalyticsPanel
+                    agents={agents}
+                    search={searchQuery}
+                    formatPrice={formatPrice}
+                  />
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </div>
