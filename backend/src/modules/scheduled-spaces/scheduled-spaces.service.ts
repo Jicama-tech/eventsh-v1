@@ -785,6 +785,95 @@ export class ScheduledSpacesService {
     }
   }
 
+  /**
+   * Tells the registrant their booking was cancelled: which event and slots,
+   * the reason if one was given, that any ticket QR no longer works, and -
+   * when money was paid - that the organizer will be in touch about a refund.
+   * Best effort: a mail failure is logged and never blocks the cancellation.
+   */
+  private async emailCancellation(
+    request: ScheduledSpaceRequestDocument,
+    opts: { reason?: string; wasPaid: boolean },
+  ) {
+    try {
+      if (!request.email) return;
+      const [event, organizer] = await Promise.all([
+        this.eventModel.findById(request.eventId).select("title"),
+        this.organizerModel
+          .findById(request.organizerId)
+          .select("emailConfig organizationName country"),
+      ]);
+      const currency = organizer?.country === "SG" ? "SG$" : "₹";
+      const c = emailBrand().palette;
+      const th = `padding:10px 14px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.4;font-weight:700;color:${c.muted};`;
+      const td = `padding:10px 14px;border-top:1px solid ${c.hairline};font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;`;
+      const slots: any[] = request.selectedSlots || [];
+      const rows = slots
+        .map(
+          (sl: any) => `
+        <tr>
+          <td valign="top" style="${td}color:${c.body};">${escapeEmailHtml(sl.spaceName)}${
+            sl.facilityType ? ` (${escapeEmailHtml(sl.facilityType)})` : ""
+          }</td>
+          <td valign="top" style="${td}color:${c.body};">${escapeEmailHtml(`${sl.date} ${sl.startTime}-${sl.endTime}`)}</td>
+          <td valign="top" align="right" style="${td}font-weight:600;color:${c.ink};text-align:right;">${escapeEmailHtml(`${currency}${sl.price}`)}</td>
+        </tr>`,
+        )
+        .join("");
+      const slotTable = slots.length
+        ? `
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${c.canvas}" style="margin:0 0 18px 0;background-color:${c.canvas};border:1px solid ${c.hairline};border-radius:8px;">
+        <tr>
+          <th align="left" style="${th}text-align:left;">Space</th>
+          <th align="left" style="${th}text-align:left;">Time Slot</th>
+          <th align="right" style="${th}text-align:right;">Price</th>
+        </tr>${rows}
+      </table>`
+        : "";
+
+      const eventTitle = event?.title || "the event";
+      const byWho = organizer?.organizationName
+        ? `the organizer (${escapeEmailHtml(organizer.organizationName)})`
+        : "the organizer";
+      const html = brandedEmail({
+        preheading: "Booking cancelled",
+        preview: `Your booking for ${eventTitle} has been cancelled.`,
+        organizer: organizer?.organizationName,
+        body: [
+          heading("Your booking was cancelled"),
+          p(`Hi ${escapeEmailHtml(request.name)},`),
+          p(
+            `Your scheduled space booking for ${strong(eventTitle)} has been cancelled by ${byWho}. The slot${
+              slots.length === 1 ? " has" : "s have"
+            } been released and your ticket QR code is no longer valid.`,
+          ),
+          opts.reason
+            ? p(`<span style="color:${c.muted};">Reason:</span> ${strong(opts.reason)}`)
+            : "",
+          slotTable,
+          opts.wasPaid
+            ? p(
+                `Since a payment was made for this booking, the organizer will get in touch with you about your refund. If you have questions, please reply to the organizer directly.`,
+              )
+            : p(`If you think this was a mistake, please contact the organizer.`),
+        ].join(""),
+      });
+
+      await this.mailService.sendEmail({
+        to: request.email,
+        subject: `Your booking was cancelled — ${eventTitle}`,
+        html,
+        senderConfig: (organizer as any)?.emailConfig,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Cancellation email failed for scheduled-space request ${request._id}: ${
+          (err as any)?.message || err
+        }`,
+      );
+    }
+  }
+
   // True when the ticket covers a group in a shared slot — worth stating on
   // the ticket so the door knows how many people this one QR admits.
   private isGroupBooking(request: ScheduledSpaceRequestDocument): boolean {
@@ -1037,6 +1126,8 @@ export class ScheduledSpacesService {
       }
     }
 
+    const alreadyCancelled = request.status === ScheduledSpaceStatusEnum.Cancelled;
+    const paidSoFar = ["Paid", "Partial"].includes(String(request.paymentStatus));
     const releasingStatuses = ["Rejected", "Cancelled"];
     let released = false;
     // Not when it was already released: giving back a shared slot's seats is
@@ -1081,6 +1172,14 @@ export class ScheduledSpacesService {
       changedAt: new Date(),
     } as any);
     await request.save();
+
+    // Let the registrant know - once, not on a repeated Cancel.
+    if (dto.status === "Cancelled" && !alreadyCancelled) {
+      await this.emailCancellation(request, {
+        reason: dto.cancellationReason,
+        wasPaid: paidSoFar,
+      });
+    }
 
     return { success: true, data: request };
   }
