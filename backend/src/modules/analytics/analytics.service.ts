@@ -72,14 +72,30 @@ export interface AgentRow {
   bySection: Partial<Record<SectionKeyName, { bookings: number; units: number; revenue: number }>>;
 }
 
+/** A section the event sells, with how much of it there is in total. */
+export interface AgentSectionInfo {
+  key: SectionKeyName;
+  label: string;
+  /** Total spaces / tickets / slots available; null when unlimited or not tracked. */
+  total: number | null;
+  unit: string;
+}
+
 /** Bookings and revenue by the agent they came through. */
 export interface AgentBreakdown {
+  /** Only the sections this event actually has (sponsors aren't agent-sold). */
+  sections: AgentSectionInfo[];
   /** Best performer first. Agents with no bookings are listed too. */
   agents: AgentRow[];
   viaAgents: { bookings: number; units: number; revenue: number };
   /** Bookings with no agent credited. */
-  direct: { bookings: number; units: number; revenue: number };
-  /** Every booking credited to an agent, paid or not. */
+  direct: {
+    bookings: number;
+    units: number;
+    revenue: number;
+    bySection: Partial<Record<SectionKeyName, { bookings: number; units: number; revenue: number }>>;
+  };
+  /** Sold bookings credited to an agent: paid or free, never unpaid or cancelled. */
   bookings: AgentBooking[];
 }
 
@@ -195,6 +211,7 @@ export class AnalyticsService {
    */
   private async agentBreakdown(
     eventId: string,
+    sections: ReportSection[],
     data: {
       tickets: any[];
       stalls: any[];
@@ -234,7 +251,12 @@ export class AnalyticsService {
       r.code = String(a.referralCode || "");
       r.isActive = a.isActive !== false;
     }
-    const direct = { bookings: 0, units: 0, revenue: 0 };
+    const direct: AgentBreakdown["direct"] = {
+      bookings: 0,
+      units: 0,
+      revenue: 0,
+      bySection: {},
+    };
 
     const credit = (key: SectionKeyName, doc: any, units: number, revenue: number) => {
       const id = doc?.referralAgentId ? String(doc.referralAgentId) : "";
@@ -249,13 +271,18 @@ export class AnalyticsService {
         sec.bookings += 1;
         sec.units += units;
         sec.revenue += revenue;
+      } else {
+        const sec = (direct.bySection[key] ||= { bookings: 0, units: 0, revenue: 0 });
+        sec.bookings += 1;
+        sec.units += units;
+        sec.revenue += revenue;
       }
     };
 
     const bookings: AgentBooking[] = [];
-    // Every agent-credited booking is listed. A booking is "sold" when it
-    // holds a space / ticket / slot — free ones included, so an agent who
-    // sells free spaces still shows up. Revenue is only the money received.
+    // A booking is "sold" when it holds a space / ticket / slot AND is paid
+    // or free. Unpaid, cancelled and rejected bookings are left out of the
+    // totals and the list. Revenue is only the money received.
     const record = (
       key: SectionKeyName,
       doc: any,
@@ -264,7 +291,8 @@ export class AnalyticsService {
       revenue: number,
       info: { customer: any; item: any; amount: any; status: any; date: any },
     ) => {
-      if (sold) credit(key, doc, units, revenue);
+      if (!sold) return;
+      credit(key, doc, units, revenue);
       const id = doc?.referralAgentId ? String(doc.referralAgentId) : "";
       if (!id) return;
       bookings.push({
@@ -298,8 +326,10 @@ export class AnalyticsService {
     }
     for (const s of data.stalls) {
       const spaces = (s.selectedTables || []).length || 1;
-      const sold = ["Processing", "Confirmed", "Completed"].includes(String(s.status));
       const paid = String(s.paymentStatus) === "Paid" && String(s.status) !== "Cancelled";
+      const sold =
+        ["Processing", "Confirmed", "Completed"].includes(String(s.status)) &&
+        (paid || n(s.grandTotal) <= 0);
       record("exhibitors", s, sold, spaces, paid ? n(s.grandTotal) : 0, {
         customer: s.brandName || s.nameOfApplicant,
         item: (s.selectedTables || [])
@@ -312,7 +342,7 @@ export class AnalyticsService {
     }
     for (const r of data.rounds) {
       const paid = String(r.paymentStatus) === "Paid";
-      record("roundTables", r, paid || n(r.amount) <= 0, 1, paid ? n(r.amount) : 0, {
+      record("roundTables", r, paid || (n(r.amount) <= 0 && !["Failed", "Refunded", "Cancelled"].includes(String(r.paymentStatus))), 1, paid ? n(r.amount) : 0, {
         customer: r.visitorName,
         item: r.tableName,
         amount: r.amount,
@@ -322,7 +352,7 @@ export class AnalyticsService {
     }
     for (const w of data.workshops) {
       const paid = String(w.paymentStatus) === "Paid";
-      record("workshops", w, paid || n(w.amount) <= 0, n(w.quantity) || 1, paid ? n(w.amount) : 0, {
+      record("workshops", w, paid || (n(w.amount) <= 0 && !["Failed", "Refunded"].includes(String(w.paymentStatus))), n(w.quantity) || 1, paid ? n(w.amount) : 0, {
         customer: w.visitorName,
         item: w.itemName,
         amount: w.amount,
@@ -357,7 +387,9 @@ export class AnalyticsService {
       );
     }
     for (const s of data.speakers) {
-      const sold = ["Confirmed", "Completed"].includes(String(s.status));
+      const sold =
+        ["Confirmed", "Completed"].includes(String(s.status)) &&
+        (!s.isCharged || String(s.paymentStatus) === "Paid");
       record(
         "speakers",
         s,
@@ -387,7 +419,15 @@ export class AnalyticsService {
       units: agents.reduce((a, x) => a + x.units, 0),
       revenue: agents.reduce((a, x) => a + x.revenue, 0),
     };
-    return { agents, viaAgents, direct, bookings };
+    const sectionInfo: AgentSectionInfo[] = sections
+      .filter((sec) => sec.key !== "sponsors")
+      .map((sec) => ({
+        key: sec.key as SectionKeyName,
+        label: sec.label,
+        total: sec.fill && sec.fill.total > 0 ? sec.fill.total : null,
+        unit: sec.fill?.unit || "",
+      }));
+    return { sections: sectionInfo, agents, viaAgents, direct, bookings };
   }
 
   private platformFeeFor(
@@ -1398,7 +1438,7 @@ export class AnalyticsService {
       (s) => n(s.depositTotal),
     );
     const supplierTotals = this.supplierCosts(supplierReqs);
-    const agents = await this.agentBreakdown(eventId, {
+    const agents = await this.agentBreakdown(eventId, sections, {
       tickets,
       stalls,
       rounds,
