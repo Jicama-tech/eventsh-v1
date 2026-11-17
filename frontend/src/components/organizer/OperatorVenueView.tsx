@@ -792,6 +792,22 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
   const zones = flatten<PositionedSpeakerZone>(event.venueSpeakerZones).filter(
     (z) => belongsToLayout((z as any)?.venueConfigId),
   );
+  // Scheduled spaces (courts, grounds, tables booked by time slot) — the
+  // storefront map shows them, so the organizer's map must too.
+  const scheduledSpaces = flatten<any>(event.venueScheduledSpaces).filter((x) =>
+    belongsToLayout(x?.venueConfigId),
+  );
+  // Individual seats and the CAD annotations (lines, labels, dimensions)
+  // drawn on this hall.
+  const seats = flatten<any>(event.venueSeats).filter((x) =>
+    belongsToLayout(x?.venueConfigId),
+  );
+  const bookedSeatIds: string[] = Array.isArray(event.seatMapBookedSeats)
+    ? event.seatMapBookedSeats
+    : [];
+  const annotations = flatten<any>(event.venueAnnotations).filter((x) =>
+    belongsToLayout(x?.venueConfigId),
+  );
   const doors = flatten<PositionedDoor>(event.venueDoors).filter((d) =>
     belongsToLayout((d as any)?.venueConfigId),
   );
@@ -839,6 +855,15 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
     for (const z of zones) {
       addX((z.x || 0) + (z.width || 0));
       addY((z.y || 0) + (z.height || 0));
+    }
+    for (const seat of seats) {
+      addX((seat.x || 0) + 30);
+      addY((seat.y || 0) + 30);
+    }
+    for (const sp of scheduledSpaces) {
+      const circle = sp.shape === "Circle";
+      addX((sp.x || 0) + ((circle ? sp.diameter : sp.width) || 100));
+      addY((sp.y || 0) + ((circle ? sp.diameter : sp.height) || 100));
     }
     for (const d of doors) {
       const dw = Number(d.width) > 0 ? Number(d.width) : 50;
@@ -1755,6 +1780,10 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
           roundTables={rounds}
           doors={doors}
           speakerZones={zones}
+          scheduledSpaces={scheduledSpaces}
+          seats={seats}
+          bookedSeatIds={bookedSeatIds}
+          annotations={annotations}
           // Tapping a booked space opens the quick card (the hover card is
           // desktop-only — no hover on touch). Its "View details" button then
           // opens the full dialog, mirroring the desktop two-step flow.
@@ -1802,6 +1831,10 @@ export function OperatorVenueView({ eventId }: { eventId: string }) {
             roundTables={rounds}
             doors={doors}
             speakerZones={zones}
+            scheduledSpaces={scheduledSpaces}
+            seats={seats}
+            bookedSeatIds={bookedSeatIds}
+            annotations={annotations}
             getState={getSpaceState}
             renderSpaceLabel={renderNothingFn}
           />

@@ -105,10 +105,15 @@ export function EventSpaceAnalyticsDialog({
   open,
   onOpenChange,
   event,
+  onExportReportCsv,
+  onExportReportPdf,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   event: any;
+  /** Full event report (all sections, agents, expenses, profit). */
+  onExportReportCsv?: () => void;
+  onExportReportPdf?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -797,6 +802,30 @@ export function EventSpaceAnalyticsDialog({
                     <DropdownMenuItem onClick={exportPdf} className="cursor-pointer">
                       <FileText className="mr-2 h-4 w-4" /> Export as PDF
                     </DropdownMenuItem>
+                    {(onExportReportCsv || onExportReportPdf) && (
+                      <>
+                        <div className="my-1 border-t" />
+                        <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted-foreground">
+                          Full event report (with agents)
+                        </div>
+                        {onExportReportCsv && (
+                          <DropdownMenuItem
+                            onClick={onExportReportCsv}
+                            className="cursor-pointer"
+                          >
+                            <FileSpreadsheet className="mr-2 h-4 w-4" /> Full report — Excel (CSV)
+                          </DropdownMenuItem>
+                        )}
+                        {onExportReportPdf && (
+                          <DropdownMenuItem
+                            onClick={onExportReportPdf}
+                            className="cursor-pointer"
+                          >
+                            <FileText className="mr-2 h-4 w-4" /> Full report — PDF
+                          </DropdownMenuItem>
+                        )}
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
