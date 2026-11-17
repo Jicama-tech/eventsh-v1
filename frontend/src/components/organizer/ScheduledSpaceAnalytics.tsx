@@ -74,6 +74,11 @@ function Bar({ value, max }: { value: number; max: number }) {
   );
 }
 
+// Exports list sold-and-confirmed bookings only: awaiting-approval ones are
+// still pending, and cancelled / rejected never reach the holders list.
+const confirmedHolders = (slot: any): any[] =>
+  (slot.holders || []).filter((h: any) => h.status === "Completed");
+
 const fmtTime = (s: any) => `${s.startTime}–${s.endTime}`;
 
 /**
@@ -163,13 +168,13 @@ export function ScheduledSpaceAnalytics({
           String(sl.booked),
           String(sl.remaining),
           STATE_LABEL[sl.state as SlotState],
-          (sl.holders || [])
+          confirmedHolders(sl)
             .map((h: any) => `${h.name} (${h.persons})`)
             .join("; "),
           // One entry per holder, in the same order as "Booked By"; a dash
           // for a booking that didn't come through an agent.
-          (sl.holders || []).map((h: any) => h.agentName || "-").join("; "),
-          (sl.holders || []).map((h: any) => h.referralCode || "-").join("; "),
+          confirmedHolders(sl).map((h: any) => h.agentName || "-").join("; "),
+          confirmedHolders(sl).map((h: any) => h.referralCode || "-").join("; "),
         ]);
       }
     }

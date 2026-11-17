@@ -114,7 +114,7 @@ export function buildScheduledSpacesPdf(
     ["REGISTERED", String(r.total ?? 0), INDIGO],
     ["CONFIRMED", String(r.byStatus?.Completed || 0), GREEN],
     ["REVENUE (CONFIRMED)", money(r.revenueConfirmed || 0), GREEN],
-    ["REVENUE (PENDING)", money(r.revenuePending || 0), AMBER],
+    ["CHECKED IN", String(r.checkedIn ?? 0), AMBER],
   ];
   const cw = (W - 3 * 10) / 4;
   kpis.forEach(([label, value, color], i) => {
@@ -261,7 +261,7 @@ export function buildScheduledSpacesPdf(
     need(300);
     heading(
       "Agent performance",
-      "Slots booked through each agent's referral link. Free bookings count; money is shown alongside.",
+      "Confirmed slots booked through each agent's referral link. Free bookings count; money is shown alongside.",
     );
     // via agents vs direct
     need(54);
@@ -358,7 +358,7 @@ export function buildScheduledSpacesPdf(
     text(GRAY);
     doc.setFontSize(7.5);
     doc.text(
-      "Counts bookings awaiting approval or confirmed. Confirmed money only; pending payments are not included.",
+      "Sold and confirmed bookings only. Cancelled, rejected and awaiting-approval requests are not included.",
       margin,
       y + 6,
     );
