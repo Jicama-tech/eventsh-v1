@@ -30,6 +30,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { ExhibitorDetailDialog } from "./ExhibitorDetailDialog";
+import { AgentsAnalyticsPanel } from "./AgentsAnalyticsPanel";
+import { fetchEventReport, type AgentBreakdown } from "@/lib/eventReportPdf";
 import { ScheduledSpaceAnalytics } from "./ScheduledSpaceAnalytics";
 import { useCountry } from "@/hooks/useCountry";
 import { useCurrency } from "@/hooks/useCurrencyhook";
@@ -120,13 +122,32 @@ export function EventSpaceAnalyticsDialog({
   const [detail, setDetail] = useState<any>(null); // full event doc
   const [stalls, setStalls] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<"spaces" | "scheduled">("spaces");
+  const [view, setView] = useState<"spaces" | "scheduled" | "agents">("spaces");
+  const [agents, setAgents] = useState<AgentBreakdown | null>(null);
   const [stallForDetail, setStallForDetail] = useState<any>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const { country } = useCountry();
-  const { config: currency } = useCurrency(country);
+  const { config: currency, formatPrice } = useCurrency(country);
 
   const eventId = event?._id;
+
+  // Agent-wise bifurcation from the event report (null = event has no agents).
+  useEffect(() => {
+    if (!open || !eventId) return;
+    let cancelled = false;
+    setAgents(null);
+    const token = sessionStorage.getItem("token");
+    fetchEventReport(
+      apiURL,
+      eventId,
+      token ? { Authorization: `Bearer ${token}` } : {},
+    ).then((r) => {
+      if (!cancelled) setAgents(r?.agents ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, eventId]);
 
   useEffect(() => {
     if (!open || !eventId) return;
@@ -756,13 +777,15 @@ export function EventSpaceAnalyticsDialog({
     Array.isArray(detail?.venueScheduledSpaces) &&
     detail.venueScheduledSpaces.length > 0;
   const showScheduled = hasScheduled && view === "scheduled";
+  const showAgents = !!agents && view === "agents";
   // An event with only Scheduled Spaces (no sellable templates) opens
   // straight on that view instead of an empty Spaces list.
   useEffect(() => {
     if (hasScheduled && templates.length === 0) setView("scheduled");
   }, [hasScheduled, templates.length]);
 
-  const canExport = !loading && !error && templates.length > 0 && !showScheduled;
+  const canExport =
+    !loading && !error && ((templates.length > 0 && !showScheduled && !showAgents) || showAgents);
 
   return (
     <>
@@ -839,13 +862,14 @@ export function EventSpaceAnalyticsDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {hasScheduled && !selected && (
+          {(hasScheduled || !!agents) && !selected && (
             <div className="inline-flex w-fit rounded-lg border bg-muted/40 p-0.5 text-sm">
               {(
                 [
                   ["spaces", "Spaces"],
-                  ["scheduled", "Scheduled Spaces"],
-                ] as const
+                  ...(hasScheduled ? [["scheduled", "Scheduled Spaces"]] : []),
+                  ...(agents ? [["agents", "Agents"]] : []),
+                ] as [("spaces" | "scheduled" | "agents"), string][]
               ).map(([key, label]) => (
                 <button
                   key={key}
@@ -863,7 +887,13 @@ export function EventSpaceAnalyticsDialog({
             </div>
           )}
 
-          {showScheduled ? (
+          {showAgents && agents ? (
+            <AgentsAnalyticsPanel
+              agents={agents}
+              search=""
+              formatPrice={formatPrice}
+            />
+          ) : showScheduled ? (
             <ScheduledSpaceAnalytics eventId={eventId} eventTitle={eventTitle} />
           ) : loading ? (
             <div className="py-16 text-center text-muted-foreground">
