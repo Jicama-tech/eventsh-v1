@@ -23,6 +23,18 @@ export class AnalyticsController {
     return { success: true, message: "Event report built", data };
   }
 
+  /**
+   * Participants per event and in total - tickets and seats, exhibitors,
+   * speakers, sponsors, round-table seats, workshops and scheduled spaces - plus
+   * whether each event is free. One count shared by the dashboard and the
+   * Participants tab so the two always match.
+   */
+  @Get("organizer/:organizerId/participants")
+  async organizerParticipants(@Param("organizerId") organizerId: string) {
+    const data = await this.analyticsService.organizerParticipants(organizerId);
+    return { success: true, message: "Participants counted", data };
+  }
+
   /** The same, per event, across everything an organizer runs. */
   @Get("organizer/:organizerId/pnl")
   async organizerPnl(@Param("organizerId") organizerId: string) {

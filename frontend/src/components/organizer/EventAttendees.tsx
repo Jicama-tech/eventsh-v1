@@ -1,5 +1,6 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
+import { fetchOrganizerParticipants } from "@/lib/participants";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { statAccent } from "@/lib/accents";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -664,16 +665,32 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
       }),
     );
 
+    // The one participant count, from the backend - the same number the
+    // dashboard's Total Participants shows. It covers tickets and seats,
+    // exhibitors, speakers, sponsors, round tables, workshops and scheduled
+    // spaces.
+    // The local sum below is only a fallback if that call fails.
+    let participantTotal: number | null = null;
+    try {
+      const token = sessionStorage.getItem("token");
+      const organizerId = token ? (jwtDecode(token) as any)?.sub : null;
+      if (organizerId) {
+        const data = await fetchOrganizerParticipants(apiURL, organizerId, token);
+        participantTotal = data?.totals.total ?? null;
+      }
+    } catch {
+      /* fall back to the local sum */
+    }
+
     setEventTicketsMap(map);
     setStats((prev) => ({
       ...prev,
-      // "Total Participants" — every person who has booked anything: ticket
-      // visitors + exhibitors with stalls + speakers + round-table seats.
       totalAttendees:
+        participantTotal ??
         totalTicketsSum +
-        totalStallsSum +
-        totalSpeakersSum +
-        totalRoundTableSum,
+          totalStallsSum +
+          totalSpeakersSum +
+          totalRoundTableSum,
       todaysAttendees: todaysAttendeesSum,
     }));
   };

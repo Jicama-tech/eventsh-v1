@@ -69,11 +69,18 @@ import {
   type EventReport,
 } from "@/lib/eventReportPdf";
 import { t } from "@/i18n/t";
+import {
+  PARTICIPANT_KINDS,
+  fetchOrganizerParticipants,
+  type EventParticipants,
+  type OrganizerParticipants,
+} from "@/lib/participants";
 
 // Updated STAT_ICONS to include new metrics
 const STAT_ICONS = {
   "Total Events": CalendarDays,
   "Total Attendees": Users,
+  "Total Participants": Users,
   "Total Tickets Sold": Ticket,
   "Total Stalls Booked": Building,
   "Tickets Sold Today": Clock,
@@ -283,6 +290,7 @@ export default function DashboardOverview({
     allEventsWithMetrics,
     stallsData = [],
     analyticsTotals = null,
+    participantTotals: OrganizerParticipants["totals"] | null = null,
   ) => {
     const totalEvents = allEventsWithMetrics.length;
     const totalTicketsSold = allEventsWithMetrics.reduce(
@@ -332,12 +340,18 @@ export default function DashboardOverview({
         ? analyticsTotals.revenue
         : ticketsRevenue + stallsRevenue;
 
-    // NOTE: For 'Total Attendees', we use 'Total Tickets Sold' as a proxy,
-    // since the API data doesn't provide a unique attendee count.
+    // Participants across every booking type, counted by the backend so it
+    // matches the Participants tab. Falls back to the local sum if unavailable.
+    const totalParticipants =
+      participantTotals?.total ??
+      allEventsWithMetrics.reduce(
+        (sum, event) => sum + (event.participants ?? event.ticketsSold ?? 0),
+        0,
+      );
 
     return [
       { title: "Total Events", value: totalEvents },
-      { title: "Total Tickets Sold", value: totalTicketsSold },
+      { title: "Total Participants", value: totalParticipants },
       { title: "Total Revenue", value: totalRevenue },
       { title: "Total Stalls Booked", value: totalStallsBooked },
     ];
@@ -438,10 +452,36 @@ export default function DashboardOverview({
         /* fall back to local calc */
       }
 
-      // 4. Process and Merge Data (with stalls)
-      const processedEvents = allEvents.map((event) =>
-        calculateEventMetrics(event, ticketData, stallsData, revenueByEvent),
+      // 3c. Participants per event (every booking type) + whether it's free.
+      const participantData = await fetchOrganizerParticipants(
+        apiURL,
+        organizerIdFromToken,
+        token,
       );
+      // (A plain object: `Map` is the lucide icon in this file.)
+      const participantsByEvent: Record<string, EventParticipants> = {};
+      for (const p of participantData?.events || []) {
+        participantsByEvent[String(p.eventId)] = p;
+      }
+
+      // 4. Process and Merge Data (with stalls)
+      const processedEvents = allEvents.map((event) => {
+        const base = calculateEventMetrics(
+          event,
+          ticketData,
+          stallsData,
+          revenueByEvent,
+        );
+        const p = participantsByEvent[String(event._id)];
+        return {
+          ...base,
+          // Fallbacks keep the card useful if the participants call failed.
+          participants: p ? p.total : base.ticketsSold + base.stallsTotal,
+          participantsByType: p || null,
+          pendingApprovals: p ? p.pending : base.stallsPending,
+          isFree: p ? p.isFree : false,
+        };
+      });
 
       // 4. Update State with Merged Data
       const now = new Date();
@@ -472,7 +512,12 @@ export default function DashboardOverview({
 
       // 5. Calculate Overall Stats (with stalls data already fetched)
       setStats(
-        calculateDashboardStats(processedEvents, stallsData, analyticsTotals),
+        calculateDashboardStats(
+          processedEvents,
+          stallsData,
+          analyticsTotals,
+          participantData?.totals ?? null,
+        ),
       );
     } catch (error) {
       toast({
@@ -518,7 +563,13 @@ export default function DashboardOverview({
           )
         : Number(event.totalTickets) || 0;
     const salesPercent = event.salesPercent || 0;
+    const participants = event.participants ?? 0;
+    const breakdown: EventParticipants | null = event.participantsByType || null;
+    const pendingApprovals = event.pendingApprovals ?? 0;
     const revenue = event.revenue || 0;
+    // A free event has no revenue to report - say so instead of showing 0.
+    const revenueLabel =
+      event.isFree && !revenue ? "Free" : formatPrice(revenue);
     const ticketsSoldToday = event.ticketsSoldToday || 0;
 
     // Stall metrics
@@ -600,83 +651,53 @@ export default function DashboardOverview({
               </Badge>
             </div>
 
-            {/* Data-Rich Metrics Grid - Enhanced with Stall Data */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4 border-t pt-4">
-              {/* Metric 1: Tickets Sold — the attendee-count metric. */}
+            {/* Metrics that mean the same thing for every kind of event:
+                participants (all booking types), what's waiting on you, and
+                revenue (or "Free"). The per-type split sits underneath. */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4 border-t pt-4">
               {canAttendees && (
-              <div className="text-center">
-                <div className={`text-xl font-bold ${statAccent(0).icon}`}>
-                  {ticketsSold}
+                <div className="text-center">
+                  <div className={`text-xl font-bold ${statAccent(0).icon}`}>
+                    {participants}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Participants
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Tickets Sold
-                </div>
-              </div>
               )}
 
-              {/* Metric 2: Stalls Booked — shown against the total sellable
-                  spaces in the venue so it reads as "booked of available". */}
               <div className="text-center">
-                <div className={`text-xl font-bold ${statAccent(4).icon}`}>
-                  {stallsBooked}
-                  {sellableSpaces > 0 && (
-                    <span className="text-sm font-semibold text-muted-foreground">
-                      {" "}
-                      / {sellableSpaces}
-                    </span>
-                  )}
+                <div className={`text-xl font-bold ${STATUS_ACCENTS.warning.icon}`}>
+                  {pendingApprovals}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Stalls Booked
+                  Awaiting approval
                 </div>
               </div>
 
-              {/* Metric 3: Total Revenue */}
               {canRevenue && (
-              <div className="text-center">
-                <div className={`text-xl font-bold ${statAccent(1).icon}`}>
-                  {formatPrice(revenue)}
+                <div className="text-center">
+                  <div className={`text-xl font-bold ${statAccent(1).icon}`}>
+                    {revenueLabel}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {event.isFree && !revenue ? "Free event" : "Total Revenue"}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Total Revenue
-                </div>
-              </div>
               )}
-
-              {/* Metric 4: Tickets Revenue */}
-              {canRevenue && (
-              <div className="text-center">
-                <div className={`text-lg font-semibold ${statAccent(5).icon}`}>
-                  {formatPrice(ticketsRevenue)}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Tickets Revenue
-                </div>
-              </div>
-              )}
-
-              {/* Metric 5: Stalls Revenue */}
-              {canRevenue && (
-              <div className="text-center">
-                <div className={`text-lg font-semibold ${statAccent(2).icon}`}>
-                  {formatPrice(stallsRevenue)}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Stalls Revenue
-                </div>
-              </div>
-              )}
-
-              {/* Metric 6: Pending Stalls */}
-              <div className="text-center">
-                <div className={`text-lg font-semibold ${STATUS_ACCENTS.warning.icon}`}>
-                  {stallsPending}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Pending Stalls
-                </div>
-              </div>
             </div>
+
+            {canAttendees && breakdown && breakdown.total > 0 && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {PARTICIPANT_KINDS.filter((k) => (breakdown[k.key] || 0) > 0).map(
+                  (k) => (
+                    <Badge key={k.key} variant="secondary" className="text-xs font-medium">
+                      {breakdown[k.key]} {k.label}
+                    </Badge>
+                  ),
+                )}
+              </div>
+            )}
 
             {/* Sales Progress Bar */}
             {totalCapacity > 0 && (
