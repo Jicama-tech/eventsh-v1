@@ -1,3 +1,5 @@
+import { AgentFilterNative } from "./AgentFilterSelect";
+import type { AgentOption } from "@/lib/participants";
 import {
   ReferralChangeControl,
   ReferralHistoryList,
@@ -52,6 +54,9 @@ interface ScheduledSpaceRequestsProps {
   registrationFormFields?: { scheduledSpace?: Record<string, boolean> } | null;
   /** Participants tab Agent filter: "all", "direct" or an agent id. */
   agentFilter?: string;
+  /** The event's agents, for the Agent dropdown beside the status filter. */
+  agentOptions?: AgentOption[];
+  onAgentFilterChange?: (value: string) => void;
 }
 
 // Who is performing an action, for the timeline. Resolved from the JWT: an
@@ -80,6 +85,8 @@ const ScheduledSpaceRequests = ({
   eventId,
   registrationFormFields,
   agentFilter,
+  agentOptions = [],
+  onAgentFilterChange,
 }: ScheduledSpaceRequestsProps) => {
   const scheduledSpaceFieldOn = (key: string) =>
     isFieldEnabled(registrationFormFields, "scheduledSpace", key);
@@ -387,6 +394,13 @@ const ScheduledSpaceRequests = ({
               <option value="Rejected">Rejected</option>
               <option value="Cancelled">Cancelled</option>
             </select>
+            {onAgentFilterChange && (
+              <AgentFilterNative
+                options={agentOptions}
+                value={agentFilter || "all"}
+                onChange={onAgentFilterChange}
+              />
+            )}
             <span className="ml-auto text-sm text-muted-foreground">
               Showing {filtered.length} of {requests.length}
             </span>

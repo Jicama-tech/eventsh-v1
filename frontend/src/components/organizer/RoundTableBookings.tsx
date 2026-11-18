@@ -1,3 +1,5 @@
+import { AgentFilterNative } from "./AgentFilterSelect";
+import type { AgentOption } from "@/lib/participants";
 import {
   ReferralChangeControl,
   ReferralHistoryList,
@@ -27,12 +29,17 @@ interface RoundTableBookingsProps {
   registrationFormFields?: { roundTable?: Record<string, boolean> } | null;
   /** Participants tab Agent filter: "all", "direct" or an agent id. */
   agentFilter?: string;
+  /** The event's agents, for the Agent dropdown beside the payment filter. */
+  agentOptions?: AgentOption[];
+  onAgentFilterChange?: (value: string) => void;
 }
 
 const RoundTableBookings = ({
   eventId,
   registrationFormFields,
   agentFilter,
+  agentOptions = [],
+  onAgentFilterChange,
 }: RoundTableBookingsProps) => {
   const guestDetailsOn = isFieldEnabled(
     registrationFormFields,
@@ -314,6 +321,13 @@ const RoundTableBookings = ({
               <option value="Failed">Failed</option>
               <option value="Refunded">Refunded</option>
             </select>
+            {onAgentFilterChange && (
+              <AgentFilterNative
+                options={agentOptions}
+                value={agentFilter || "all"}
+                onChange={onAgentFilterChange}
+              />
+            )}
             <span className="ml-auto text-sm text-muted-foreground">
               Showing {filteredBookings.length} of {bookings.length}
             </span>

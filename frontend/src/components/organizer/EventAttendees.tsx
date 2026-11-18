@@ -1,5 +1,6 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
+import { AgentFilterSelect } from "./AgentFilterSelect";
 import {
   ReferralChangeControl,
   ReferralHistoryList,
@@ -2181,6 +2182,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
           </SelectContent>
         </Select>
       </div>
+      <AgentFilterSelect
+        options={agentOptions}
+        value={agentFilter}
+        onChange={setAgentFilter}
+      />
     </div>
   );
 
@@ -3100,33 +3106,6 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   } as Record<number, string>)[visibleCount] || "grid-cols-7";
                 return (
               <>
-              {agentOptions.length > 0 && (
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {t("Agent")}
-                  </span>
-                  <Select value={agentFilter} onValueChange={setAgentFilter}>
-                    <SelectTrigger className="h-9 w-[240px]">
-                      <SelectValue placeholder={t("All agents")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("All participants")}</SelectItem>
-                      <SelectItem value="direct">{t("Direct (no agent)")}</SelectItem>
-                      {agentOptions.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name}
-                          {a.code ? ` · ${a.code}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {agentFilter !== "all" && (
-                    <span className="text-xs text-muted-foreground">
-                      {t("Showing visitors, exhibitors, speakers, round tables and scheduled spaces booked this way.")}
-                    </span>
-                  )}
-                </div>
-              )}
               <Tabs
                 value={detailTab}
                 onValueChange={(v) => setDetailTab(v as any)}
@@ -3342,6 +3321,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 <SelectItem value="Cancelled">Cancelled</SelectItem>
                               </SelectContent>
                             </Select>
+                            <AgentFilterSelect
+                              options={agentOptions}
+                              value={agentFilter}
+                              onChange={setAgentFilter}
+                            />
                             <Select
                               value={exhibitorPaymentFilter}
                               onValueChange={setExhibitorPaymentFilter}
@@ -3700,6 +3684,11 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                                 <SelectItem value="Rejected">Rejected</SelectItem>
                               </SelectContent>
                             </Select>
+                            <AgentFilterSelect
+                              options={agentOptions}
+                              value={agentFilter}
+                              onChange={setAgentFilter}
+                            />
                             <span className="ml-auto text-sm text-muted-foreground">
                               Showing {filteredSpeakers.length} of{" "}
                               {eventSpeakers.length}
@@ -3860,6 +3849,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   <RoundTableBookings
                     eventId={selectedEvent._id}
                     agentFilter={agentFilter}
+                    agentOptions={agentOptions}
+                    onAgentFilterChange={setAgentFilter}
                     registrationFormFields={(selectedEvent as any)?.registrationFormFields}
                   />
                 </TabsContent>
@@ -3881,6 +3872,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                   <ScheduledSpaceRequests
                     eventId={selectedEvent._id}
                     agentFilter={agentFilter}
+                    agentOptions={agentOptions}
+                    onAgentFilterChange={setAgentFilter}
                     registrationFormFields={(selectedEvent as any)?.registrationFormFields}
                   />
                 </TabsContent>
