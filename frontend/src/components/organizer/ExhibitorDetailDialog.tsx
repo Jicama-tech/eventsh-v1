@@ -6,6 +6,10 @@
 // their corresponding callback prop is supplied — that's how the volunteer
 // view stays read-only without forking the markup.
 
+import {
+  ReferralChangeControl,
+  ReferralHistoryList,
+} from "./ReferralChangeControl";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
@@ -247,6 +251,9 @@ export interface ExhibitorDetailDialogProps {
   /** Shows the operator referral (from a shared ?ref= link) in Shopkeeper
    * Information. Only the Participants mount passes it. */
   showReferral?: boolean;
+  /** Participants mount: called with the server's patch after the organizer
+   * moves the booking to another agent. Enables the Change control. */
+  onReferralChanged?: (patch: any) => void;
 }
 
 export function ExhibitorDetailDialog({
@@ -265,6 +272,7 @@ export function ExhibitorDetailDialog({
   currentUserDisplay,
   registrationFormFields,
   showReferral,
+  onReferralChanged,
 }: ExhibitorDetailDialogProps) {
   const stallFieldOn = (key: string) =>
     isFieldEnabled(registrationFormFields, "stall", key);
@@ -1260,19 +1268,32 @@ export function ExhibitorDetailDialog({
                   </p>
                 </div>
 
-                {showReferral && stallWithReferral?.referralCode && (
+                {showReferral && (
                   <div>
-                    <Label className="text-muted-foreground">{t("Referral")}</Label>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-muted-foreground">{t("Referral")}</Label>
+                      {onReferralChanged && (
+                        <ReferralChangeControl
+                          eventId={String(
+                            (stallRequest as any).eventId?._id ?? (stallRequest as any).eventId ?? "",
+                          )}
+                          kind="stall"
+                          bookingId={String(stallRequest._id)}
+                          currentAgentId={(stallWithReferral as any)?.referralAgentId}
+                          onChanged={onReferralChanged}
+                        />
+                      )}
+                    </div>
                     <p className="text-sm">
                       {[
-                        stallWithReferral.referralCode,
-                        stallWithReferral.referralOperatorName ||
-                          (stallWithReferral.referralAgentName
+                        stallWithReferral?.referralCode,
+                        stallWithReferral?.referralOperatorName ||
+                          (stallWithReferral?.referralAgentName
                             ? `${t("Agent")}: ${stallWithReferral.referralAgentName}`
                             : ""),
                       ]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .join(" · ") || "—"}
                     </p>
                   </div>
                 )}

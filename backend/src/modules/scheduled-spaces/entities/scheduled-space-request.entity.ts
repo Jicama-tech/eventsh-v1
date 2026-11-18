@@ -62,6 +62,10 @@ export class ScheduledSpaceStatusHistory {
   @Prop({ type: String, enum: ScheduledSpaceStatusEnum, required: true })
   status: ScheduledSpaceStatusEnum;
 
+  /** Organizer-only entry (e.g. a referral reassignment) - hidden from the registrant. */
+  @Prop({ type: Boolean })
+  internal?: boolean;
+
   @Prop({ type: String })
   note?: string;
 

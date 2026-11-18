@@ -1,5 +1,6 @@
 // File: EventDetailPage.tsx
 
+import { visibleHistory } from "@/lib/timeline";
 import React, {
   useState,
   useEffect,
@@ -4540,9 +4541,9 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
       });
 
       // ── Status History ───────────────────────────────────────
-      if (existingStallRequest.statusHistory?.length > 0) {
+      if (visibleHistory(existingStallRequest.statusHistory).length > 0) {
         sectionTitle("Status History & Notes");
-        existingStallRequest.statusHistory.forEach(
+        visibleHistory(existingStallRequest.statusHistory).forEach(
           (entry: any, index: number) => {
             checkNewPage(20);
             const entryColors: Record<string, [number, number, number]> = {
@@ -15641,7 +15642,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                 Status History
               </p>
               <StatusTimeline
-                history={existingScheduledSpaceRequest?.statusHistory}
+                history={visibleHistory(existingScheduledSpaceRequest?.statusHistory)}
               />
             </div>
             {["Completed", "Cancelled", "Rejected"].includes(
@@ -18677,8 +18678,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           </Card>
 
                           {/* Status History */}
-                          {stallRequest.statusHistory &&
-                            stallRequest.statusHistory.length > 0 && (
+                          {visibleHistory(stallRequest.statusHistory).length > 0 && (
                               <Card>
                                 <CardHeader>
                                   <CardTitle className="text-lg flex items-center gap-2">
@@ -18689,7 +18689,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 <CardContent>
                                   <div className="relative space-y-0">
                                     <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
-                                    {stallRequest.statusHistory.map(
+                                    {visibleHistory(stallRequest.statusHistory).map(
                                       (entry: any, index: number) => {
                                         const statusConfig: Record<
                                           string,

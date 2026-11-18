@@ -125,6 +125,10 @@ export class StatusHistory {
   @Prop({ type: String, enum: StallStatusEnum, required: true })
   status: StallStatusEnum;
 
+  /** Organizer-only entry (e.g. a referral reassignment) - hidden from the vendor. */
+  @Prop({ type: Boolean, required: false })
+  internal?: boolean;
+
   @Prop({ type: String, required: false })
   note?: string;
 

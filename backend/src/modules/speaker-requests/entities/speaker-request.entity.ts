@@ -41,6 +41,10 @@ export class StatusHistory {
   @Prop({ type: String, enum: SpeakerRequestStatus, required: true })
   status: SpeakerRequestStatus;
 
+  /** Organizer-only entry (e.g. a referral reassignment) - hidden from the speaker. */
+  @Prop({ type: Boolean, required: false })
+  internal?: boolean;
+
   @Prop()
   note?: string;
 

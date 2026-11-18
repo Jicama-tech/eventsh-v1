@@ -85,6 +85,13 @@ export class RoundTableBooking {
   @Prop()
   referralAgentId?: string;
 
+  // Organizer-only log of referral reassignments (never sent to the visitor).
+  @Prop({
+    type: [{ _id: false, note: String, changedBy: String, changedAt: Date }],
+    default: undefined,
+  })
+  referralHistory?: { note: string; changedBy: string; changedAt: Date }[];
+
   @Prop()
   referralAgentName?: string;
 

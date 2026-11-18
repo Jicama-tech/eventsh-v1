@@ -1,3 +1,7 @@
+import {
+  ReferralChangeControl,
+  ReferralHistoryList,
+} from "./ReferralChangeControl";
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,12 +43,15 @@ import { useCurrency } from "@/hooks/useCurrencyhook";
 import { isFieldEnabled } from "@/lib/registrationFormFields";
 import StatusTimeline from "@/components/StatusTimeline";
 import { t } from "@/i18n/t";
+import { matchesAgent } from "@/lib/participants";
 
 const apiURL = __API_URL__;
 
 interface ScheduledSpaceRequestsProps {
   eventId: string;
   registrationFormFields?: { scheduledSpace?: Record<string, boolean> } | null;
+  /** Participants tab Agent filter: "all", "direct" or an agent id. */
+  agentFilter?: string;
 }
 
 // Who is performing an action, for the timeline. Resolved from the JWT: an
@@ -72,6 +79,7 @@ const getActorLabel = (): string => {
 const ScheduledSpaceRequests = ({
   eventId,
   registrationFormFields,
+  agentFilter,
 }: ScheduledSpaceRequestsProps) => {
   const scheduledSpaceFieldOn = (key: string) =>
     isFieldEnabled(registrationFormFields, "scheduledSpace", key);
@@ -335,6 +343,7 @@ const ScheduledSpaceRequests = ({
   }
 
   const filtered = requests.filter((r) => {
+    if (!matchesAgent(r, agentFilter)) return false;
     const q = search.trim().toLowerCase();
     if (q) {
       const hay = [r.name, r.email, r.organization, r.purpose]
@@ -517,17 +526,30 @@ const ScheduledSpaceRequests = ({
                       {selected.organization}
                     </p>
                   )}
-                {selected.referralCode && (
-                  <p className="text-xs text-muted-foreground">
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>
                     {t("Referral")}:{" "}
-                    <span className="font-mono">{selected.referralCode}</span>
-                    {selected.referralOperatorName
-                      ? ` · ${selected.referralOperatorName}`
-                      : selected.referralAgentName
-                        ? ` · ${t("Agent")}: ${selected.referralAgentName}`
-                        : ""}
-                  </p>
-                )}
+                    {selected.referralCode ? (
+                      <>
+                        <span className="font-mono">{selected.referralCode}</span>
+                        {selected.referralOperatorName
+                          ? ` · ${selected.referralOperatorName}`
+                          : selected.referralAgentName
+                            ? ` · ${t("Agent")}: ${selected.referralAgentName}`
+                            : ""}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </span>
+                  <ReferralChangeControl
+                    eventId={eventId}
+                    kind="scheduledSpace"
+                    bookingId={selected._id}
+                    currentAgentId={selected.referralAgentId}
+                    onChanged={(patch) => refreshOne({ ...selected, ...patch })}
+                  />
+                </p>
                 {scheduledSpaceFieldOn("purpose") && selected.purpose && (
                   <p className="text-sm text-muted-foreground mt-1">
                     {selected.purpose}

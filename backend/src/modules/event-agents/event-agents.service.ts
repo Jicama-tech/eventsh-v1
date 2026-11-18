@@ -26,6 +26,8 @@ import { EventAgent, EventAgentDocument } from "./schemas/event-agent.schema";
 import {
   CreateEventAgentDto,
   MAX_EXTRA_CONTACTS,
+  ReassignKind,
+  ReassignReferralDto,
   REFERRAL_CODE_MESSAGE,
   REFERRAL_CODE_PATTERN,
   ShareEventAgentDto,
@@ -94,6 +96,13 @@ export class EventAgentsService {
     // Operator codes share the `?ref=` namespace, so a new agent code must
     // not collide with one.
     @InjectModel("Operator") private readonly operatorModel: Model<any>,
+    // Bookings whose referral can be reassigned.
+    @InjectModel("Ticket") private readonly ticketModel: Model<any>,
+    @InjectModel("Stall") private readonly stallModel: Model<any>,
+    @InjectModel("RoundTableBooking") private readonly roundTableModel: Model<any>,
+    @InjectModel("SpeakerRequest") private readonly speakerModel: Model<any>,
+    @InjectModel("ScheduledSpaceRequest") private readonly scheduledModel: Model<any>,
+    @InjectModel("WorkshopBooking") private readonly workshopModel: Model<any>,
     private readonly mailService: MailService,
     private readonly otpService: OtpService,
   ) {}
@@ -135,6 +144,200 @@ export class EventAgentsService {
     });
     if (!agent) throw new NotFoundException("Agent not found");
     return { event, agent };
+  }
+
+  // ── Reassigning a booking's referral ─────────────────────────────────────
+
+  private bookingModelFor(kind: ReassignKind): Model<any> {
+    switch (kind) {
+      case "ticket":
+        return this.ticketModel;
+      case "stall":
+        return this.stallModel;
+      case "speaker":
+        return this.speakerModel;
+      case "roundTable":
+        return this.roundTableModel;
+      case "scheduledSpace":
+        return this.scheduledModel;
+      case "workshop":
+        return this.workshopModel;
+    }
+  }
+
+  /**
+   * Credit a booking to another agent of the same event, or to none (direct).
+   *
+   * Only the event's organizer (or their operator, or an admin) can do it.
+   * The change is written to the booking's timeline with the signed-in
+   * person's name taken from the token. Bookings that have a status timeline
+   * (exhibitors, speakers, scheduled spaces) get an organizer-only entry on
+   * it; tickets and round tables, which have none, get an organizer-only
+   * referral history. Public responses strip both, so the visitor never sees
+   * that the referral was changed. Agents' `usedCount`s follow the move.
+   */
+  async reassignBooking(
+    eventId: string,
+    dto: ReassignReferralDto,
+    actor: Actor,
+  ) {
+    const event = await this.ownedEvent(eventId, actor);
+    const model = this.bookingModelFor(dto.kind);
+    if (!model || !Types.ObjectId.isValid(String(dto.bookingId ?? ""))) {
+      throw new NotFoundException("Booking not found");
+    }
+    const booking: any = await model
+      .findById(dto.bookingId)
+      .select(
+        "eventId ticketId status referralCode referralAgentId referralAgentName referralOperatorId referralOperatorName",
+      )
+      .lean();
+    const bookingEvent = String(booking?.eventId?._id ?? booking?.eventId ?? "");
+    if (!booking || bookingEvent !== String(event._id)) {
+      // Same answer for "no such booking" and "another event's booking".
+      throw new NotFoundException("Booking not found for this event");
+    }
+
+    const target = dto.agentId
+      ? (await this.ownedAgent(eventId, dto.agentId, actor)).agent
+      : null;
+
+    const oldAgentId = booking.referralAgentId ? String(booking.referralAgentId) : "";
+    const label = (name?: string, code?: string) =>
+      name ? `${name}${code ? ` (${code})` : ""}` : code || "";
+    const before =
+      booking.referralAgentName
+        ? `Agent ${label(booking.referralAgentName, booking.referralCode)}`
+        : booking.referralOperatorName
+          ? `Operator ${label(booking.referralOperatorName, booking.referralCode)}`
+          : booking.referralCode
+            ? `Code ${booking.referralCode}`
+            : "Direct (no referral)";
+    const after = target
+      ? `Agent ${label(target.name, target.referralCode)}`
+      : "Direct (no referral)";
+    if (target ? oldAgentId === String(target._id) : before === "Direct (no referral)") {
+      throw new BadRequestException(
+        target
+          ? "This booking is already credited to that agent."
+          : "This booking has no referral to remove.",
+      );
+    }
+
+    // Who did it - from the verified token, not the request body.
+    const roles = Array.isArray(actor?.roles) ? actor.roles : [];
+    const role = actor?.operatorId
+      ? "operator"
+      : roles.includes("admin")
+        ? "admin"
+        : "organizer";
+    const who = `${String(actor?.name || "Organizer").trim() || "Organizer"} (${role})`;
+    const note = `Referral changed from ${before} to ${after} by ${who}`;
+    const at = new Date();
+
+    const set: Record<string, any> = target
+      ? {
+          referralCode: target.referralCode,
+          referralAgentId: String(target._id),
+          referralAgentName: target.name,
+        }
+      : {};
+    const unset: Record<string, 1> = target
+      ? { referralOperatorId: 1, referralOperatorName: 1 }
+      : {
+          referralCode: 1,
+          referralAgentId: 1,
+          referralAgentName: 1,
+          referralOperatorId: 1,
+          referralOperatorName: 1,
+        };
+    const hasTimeline = ["stall", "speaker", "scheduledSpace"].includes(dto.kind);
+    const push = hasTimeline
+      ? {
+          statusHistory: {
+            status: booking.status,
+            note,
+            changedBy: who,
+            changedAt: at,
+            internal: true,
+          },
+        }
+      : { referralHistory: { note, changedBy: who, changedAt: at } };
+
+    const updated: any = await model
+      .findByIdAndUpdate(
+        dto.bookingId,
+        {
+          ...(Object.keys(set).length ? { $set: set } : {}),
+          $unset: unset,
+          $push: push,
+        },
+        { new: true },
+      )
+      .select(
+        "referralCode referralAgentId referralAgentName referralOperatorId referralOperatorName statusHistory referralHistory",
+      )
+      .lean();
+
+    // A confirmed workshop booking is mirrored by a "WS-<bookingId>" ticket
+    // (that is what the Visitors list shows). Move both so the ticket and the
+    // booking - which the agent reports read - never disagree.
+    const mirrorOps = {
+      ...(Object.keys(set).length ? { $set: set } : {}),
+      $unset: unset,
+      $push: { referralHistory: { note, changedBy: who, changedAt: at } },
+    };
+    if (dto.kind === "ticket" && String(booking.ticketId || "").startsWith("WS-")) {
+      const wid = String(booking.ticketId).slice(3);
+      if (Types.ObjectId.isValid(wid)) {
+        const wb: any = await this.workshopModel.findById(wid).select("eventId").lean();
+        if (wb && String(wb.eventId?._id ?? wb.eventId) === String(event._id)) {
+          await this.workshopModel.updateOne({ _id: wid }, mirrorOps);
+        }
+      }
+    } else if (dto.kind === "workshop") {
+      await this.ticketModel.updateOne(
+        {
+          ticketId: `WS-${dto.bookingId}`,
+          eventId: { $in: [String(event._id), event._id] },
+        },
+        {
+          ...(Object.keys(set).length ? { $set: set } : {}),
+          $unset: unset,
+          $push: { referralHistory: { note, changedBy: who, changedAt: at } },
+        },
+      );
+    }
+
+    // Keep the agents' booking counts honest. (An organizer override is not
+    // held to the new agent's cap.)
+    if (oldAgentId && Types.ObjectId.isValid(oldAgentId)) {
+      await this.agentModel.updateOne(
+        { _id: oldAgentId, usedCount: { $gt: 0 } },
+        { $inc: { usedCount: -1 } },
+      );
+    }
+    if (target) {
+      await this.agentModel.updateOne(
+        { _id: target._id },
+        { $inc: { usedCount: 1 }, $set: { lastUsedAt: at } },
+      );
+    }
+
+    this.logger.log(`Referral reassigned on ${dto.kind} ${dto.bookingId}: ${note}`);
+    return {
+      success: true,
+      message: "Referral updated",
+      data: {
+        referralCode: updated?.referralCode || "",
+        referralAgentId: updated?.referralAgentId ? String(updated.referralAgentId) : "",
+        referralAgentName: updated?.referralAgentName || "",
+        referralOperatorId: updated?.referralOperatorId || "",
+        referralOperatorName: updated?.referralOperatorName || "",
+        statusHistory: updated?.statusHistory,
+        referralHistory: updated?.referralHistory,
+      },
+    };
   }
 
   // ── CRUD ─────────────────────────────────────────────────────────────────

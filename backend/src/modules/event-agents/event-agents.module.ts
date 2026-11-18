@@ -8,6 +8,12 @@ import {
   OrganizerStoreSchema,
 } from "../organizer-stores/entities/organizer-store.entity";
 import { OperatorSchema } from "../operators/entities/operator.entity";
+import { TicketSchema } from "../tickets/entities/ticket.entity";
+import { StallSchema } from "../stalls/entities/stall.entity";
+import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
+import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
+import { ScheduledSpaceRequestSchema } from "../scheduled-spaces/entities/scheduled-space-request.entity";
+import { WorkshopBookingSchema } from "../workshop-bookings/entities/workshop-booking.entity";
 import { MailModule } from "../roles/mail.module";
 import { OtpModule } from "../otp/otp.module";
 import { WhatsappModule } from "../whatsapp/whatsapp.module";
@@ -33,6 +39,13 @@ import { EventAgentsService } from "./event-agents.service";
       { name: "Organizer", schema: OrganizerSchema },
       { name: "OrganizerStore", schema: OrganizerStoreSchema },
       { name: "Operator", schema: OperatorSchema },
+      // Bookings whose referral an organizer can reassign (see reassignBooking).
+      { name: "Ticket", schema: TicketSchema },
+      { name: "Stall", schema: StallSchema },
+      { name: "RoundTableBooking", schema: RoundTableBookingSchema },
+      { name: "SpeakerRequest", schema: SpeakerRequestSchema },
+      { name: "ScheduledSpaceRequest", schema: ScheduledSpaceRequestSchema },
+      { name: "WorkshopBooking", schema: WorkshopBookingSchema },
     ]),
     MailModule,
     OtpModule,
