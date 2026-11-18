@@ -16,6 +16,7 @@ import { TabsGuard } from "../../common/tabs/tabs.guard";
 import { Tabs } from "../../common/tabs/tabs.decorator";
 import {
   CreateEventAgentDto,
+  ReassignReferralDto,
   ShareEventAgentDto,
   UpdateEventAgentDto,
 } from "./dto/event-agent.dto";
@@ -48,6 +49,22 @@ export class EventAgentsController {
     @Query("agentId") agentId?: string,
   ) {
     return this.agents.checkCode(eventId, code, agentId, req.user);
+  }
+
+  /**
+   * Credit an existing booking to another agent (or none). The change is
+   * logged on the booking's timeline with who made it; the visitor never sees
+   * it. Registered before the `:agentId` routes so `reassign` is not read as
+   * an agent id.
+   */
+  @Post("reassign")
+  @HttpCode(200)
+  reassign(
+    @Req() req: any,
+    @Param("eventId") eventId: string,
+    @Body() dto: ReassignReferralDto,
+  ) {
+    return this.agents.reassignBooking(eventId, dto, req.user);
   }
 
   @Post()

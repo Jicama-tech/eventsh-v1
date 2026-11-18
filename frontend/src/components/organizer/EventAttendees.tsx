@@ -1,6 +1,14 @@
 // File: src/components/DashboardTabs/EventAttendees.tsx
 
-import { fetchOrganizerParticipants } from "@/lib/participants";
+import {
+  ReferralChangeControl,
+  ReferralHistoryList,
+} from "./ReferralChangeControl";
+import {
+  fetchOrganizerParticipants,
+  matchesAgent,
+  type AgentOption,
+} from "@/lib/participants";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { statAccent } from "@/lib/accents";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -472,9 +480,42 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // Lets the organizer correct a mistyped address before re-sending.
   const [resendEmail, setResendEmail] = useState("");
   // Inner-tab state for the unified View dialog
+  // Agent filter for the open event's Participants: "all", "direct" (no
+  // agent) or an agent id. Options are the event's own agents.
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [agentOptions, setAgentOptions] = useState<AgentOption[]>([]);
   const [detailTab, setDetailTab] = useState<
     "visitors" | "exhibitors" | "speakers" | "roundtables" | "sponsors"
   >("visitors");
+  // The open event's agents feed the Agent filter. A failed call (e.g. the
+  // plan has no Agents tab) just leaves the filter hidden.
+  useEffect(() => {
+    setAgentFilter("all");
+    setAgentOptions([]);
+    const id = selectedEvent?._id;
+    if (!id) return;
+    let cancelled = false;
+    const token = sessionStorage.getItem("token");
+    fetch(`${apiURL}/events/${encodeURIComponent(id)}/agents`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled) return;
+        const list: any[] = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [];
+        setAgentOptions(
+          list.map((a) => ({
+            id: String(a.id ?? a._id),
+            name: String(a.name || "Agent"),
+            code: String(a.referralCode || ""),
+          })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent?._id]);
   const [stallRequest, setStallRequest] = useState<StallRequest | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -2042,6 +2083,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   const filteredEventTickets = eventTickets.filter((ticket) => {
     return (
+      matchesAgent(ticket, agentFilter) &&
       (ticketFilter === "" ||
         ticket.customerName
           .toLowerCase()
@@ -2174,6 +2216,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
   // ── Per-tab filtered lists ──────────────────────────────────────────────
   // Exhibitors: filter by name/business/email + booking status + payment.
   const filteredStalls = stalls.filter((s: any) => {
+    if (!matchesAgent(s, agentFilter)) return false;
     const q = exhibitorSearch.trim().toLowerCase();
     if (q) {
       const v = s.shopkeeperId || {};
@@ -2240,6 +2283,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
   // Speakers: filter by name/org/email/topic + request status.
   const filteredSpeakers = eventSpeakers.filter((req: any) => {
+    if (!matchesAgent(req, agentFilter)) return false;
     const q = speakerSearch.trim().toLowerCase();
     if (q) {
       const hay = [
@@ -3055,6 +3099,34 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                     7: "grid-cols-7",
                   } as Record<number, string>)[visibleCount] || "grid-cols-7";
                 return (
+              <>
+              {agentOptions.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {t("Agent")}
+                  </span>
+                  <Select value={agentFilter} onValueChange={setAgentFilter}>
+                    <SelectTrigger className="h-9 w-[240px]">
+                      <SelectValue placeholder={t("All agents")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("All participants")}</SelectItem>
+                      <SelectItem value="direct">{t("Direct (no agent)")}</SelectItem>
+                      {agentOptions.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name}
+                          {a.code ? ` · ${a.code}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {agentFilter !== "all" && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("Showing visitors, exhibitors, speakers, round tables and scheduled spaces booked this way.")}
+                    </span>
+                  )}
+                </div>
+              )}
               <Tabs
                 value={detailTab}
                 onValueChange={(v) => setDetailTab(v as any)}
@@ -3787,6 +3859,7 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 <TabsContent value="roundtables" className="pt-4">
                   <RoundTableBookings
                     eventId={selectedEvent._id}
+                    agentFilter={agentFilter}
                     registrationFormFields={(selectedEvent as any)?.registrationFormFields}
                   />
                 </TabsContent>
@@ -3807,11 +3880,13 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                 <TabsContent value="scheduledSpaces" className="pt-4">
                   <ScheduledSpaceRequests
                     eventId={selectedEvent._id}
+                    agentFilter={agentFilter}
                     registrationFormFields={(selectedEvent as any)?.registrationFormFields}
                   />
                 </TabsContent>
                 )}
               </Tabs>
+              </>
                 );
               })()}
             </div>
@@ -4266,22 +4341,39 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                           "—"}
                       </div>
                     </div>
-                    {selectedVisitor.referralCode && (
-                      <div>
-                        <div className="font-medium">Referral</div>
-                        <div className="text-muted-foreground">
-                          {[
-                            selectedVisitor.referralCode,
-                            selectedVisitor.referralOperatorName ||
-                              (selectedVisitor.referralAgentName
-                                ? `Agent: ${selectedVisitor.referralAgentName}`
-                                : ""),
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Referral</span>
+                        {selectedEvent && (
+                          <ReferralChangeControl
+                            eventId={selectedEvent._id}
+                            kind="ticket"
+                            bookingId={selectedVisitor._id}
+                            currentAgentId={selectedVisitor.referralAgentId}
+                            onChanged={(patch) => {
+                              setSelectedVisitor((v: any) => (v ? { ...v, ...patch } : v));
+                              setEventTickets((prev) =>
+                                prev.map((tk: any) =>
+                                  tk._id === selectedVisitor._id ? { ...tk, ...patch } : tk,
+                                ),
+                              );
+                            }}
+                          />
+                        )}
                       </div>
-                    )}
+                      <div className="text-muted-foreground">
+                        {[
+                          selectedVisitor.referralCode,
+                          selectedVisitor.referralOperatorName ||
+                            (selectedVisitor.referralAgentName
+                              ? `Agent: ${selectedVisitor.referralAgentName}`
+                              : ""),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </div>
+                      <ReferralHistoryList history={selectedVisitor.referralHistory} />
+                    </div>
                     <div>
                       <div className="font-medium">Status</div>
                       <Badge variant="secondary">
@@ -4528,9 +4620,26 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                       {selectedSpeaker.source || "—"}
                     </div>
                   </div>
-                  {selectedSpeaker.referralCode && (
                   <div>
-                    <div className="font-medium">Referral</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Referral</span>
+                      {selectedEvent && (
+                        <ReferralChangeControl
+                          eventId={selectedEvent._id}
+                          kind="speaker"
+                          bookingId={selectedSpeaker._id}
+                          currentAgentId={selectedSpeaker.referralAgentId}
+                          onChanged={(patch) => {
+                            setSelectedSpeaker((v: any) => (v ? { ...v, ...patch } : v));
+                            setEventSpeakers((prev) =>
+                              prev.map((sp: any) =>
+                                sp._id === selectedSpeaker._id ? { ...sp, ...patch } : sp,
+                              ),
+                            );
+                          }}
+                        />
+                      )}
+                    </div>
                     <div className="text-muted-foreground">
                       {[
                         selectedSpeaker.referralCode,
@@ -4540,10 +4649,9 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
                             : ""),
                       ]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .join(" · ") || "—"}
                     </div>
                   </div>
-                  )}
                   {speakerFieldOn("expertise") && (
                   <div>
                     <div className="font-medium">Area of expertise</div>
@@ -4911,6 +5019,14 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
         stallRequest={stallRequest}
         registrationFormFields={(selectedEvent as any)?.registrationFormFields}
         showReferral
+        onReferralChanged={(patch) => {
+          setStallRequest((prev: any) => (prev ? { ...prev, ...patch } : prev));
+          setStalls((prev) =>
+            prev.map((st: any) =>
+              st._id === (stallRequest as any)?._id ? { ...st, ...patch } : st,
+            ),
+          );
+        }}
         detailRef={stallDetailRef}
         isGeneratingPDF={isGeneratingPDF}
         onSharePDF={handleSharePDF}

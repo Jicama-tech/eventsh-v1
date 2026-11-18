@@ -170,3 +170,27 @@ export class ShareEventAgentDto {
   @MaxLength(500)
   note?: string;
 }
+
+/** The kinds of booking whose referral an organizer can reassign. */
+export const REASSIGN_KINDS = [
+  "ticket",
+  "stall",
+  "speaker",
+  "roundTable",
+  "scheduledSpace",
+] as const;
+export type ReassignKind = (typeof REASSIGN_KINDS)[number];
+
+/** Move one booking's referral to another agent of the same event (or to none). */
+export class ReassignReferralDto {
+  @IsIn(REASSIGN_KINDS as unknown as string[])
+  kind: ReassignKind;
+
+  @IsString()
+  bookingId: string;
+
+  /** The agent to credit; omit or null to make it a direct booking. */
+  @IsOptional()
+  @IsString()
+  agentId?: string | null;
+}

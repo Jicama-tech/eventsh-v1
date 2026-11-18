@@ -8,6 +8,7 @@ const REFERRAL_FIELDS = [
   "referralOperatorName",
   "referralAgentId",
   "referralAgentName",
+  "referralHistory",
 ] as const;
 
 export function omitReferralFields<T>(doc: T): T {
@@ -17,5 +18,9 @@ export function omitReferralFields<T>(doc: T): T {
       ? (doc as any).toJSON()
       : { ...(doc as any) };
   for (const field of REFERRAL_FIELDS) delete plain[field];
+  // Organizer-only timeline entries (e.g. a referral reassignment).
+  if (Array.isArray(plain.statusHistory)) {
+    plain.statusHistory = plain.statusHistory.filter((h: any) => !h?.internal);
+  }
   return plain;
 }

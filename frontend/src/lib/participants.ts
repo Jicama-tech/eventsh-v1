@@ -61,3 +61,23 @@ export async function fetchOrganizerParticipants(
     return null;
   }
 }
+
+/** An event agent as offered in the Participants tab's Agent filter. */
+export interface AgentOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
+/** "all" shows everyone; "direct" only bookings with no agent; otherwise an agent id. */
+export type AgentFilterValue = string;
+
+/** Does this booking belong under the chosen Agent filter? */
+export function matchesAgent(
+  booking: { referralAgentId?: unknown } | null | undefined,
+  filter: AgentFilterValue | undefined,
+): boolean {
+  if (!filter || filter === "all") return true;
+  const id = booking?.referralAgentId ? String(booking.referralAgentId) : "";
+  return filter === "direct" ? !id : id === filter;
+}

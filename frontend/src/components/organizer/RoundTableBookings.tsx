@@ -1,5 +1,10 @@
+import {
+  ReferralChangeControl,
+  ReferralHistoryList,
+} from "./ReferralChangeControl";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { statAccent, STATUS_ACCENTS } from "@/lib/accents";
+import { matchesAgent } from "@/lib/participants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,11 +25,14 @@ import { t } from "@/i18n/t";
 interface RoundTableBookingsProps {
   eventId: string;
   registrationFormFields?: { roundTable?: Record<string, boolean> } | null;
+  /** Participants tab Agent filter: "all", "direct" or an agent id. */
+  agentFilter?: string;
 }
 
 const RoundTableBookings = ({
   eventId,
   registrationFormFields,
+  agentFilter,
 }: RoundTableBookingsProps) => {
   const guestDetailsOn = isFieldEnabled(
     registrationFormFields,
@@ -219,6 +227,7 @@ const RoundTableBookings = ({
   }
 
   const filteredBookings = bookings.filter((b) => {
+    if (!matchesAgent(b, agentFilter)) return false;
     const q = rtSearch.trim().toLowerCase();
     if (q) {
       const hay = [b.visitorName, b.visitorEmail, b.visitorPhone]
@@ -691,10 +700,24 @@ const RoundTableBookings = ({
                     {selectedBooking.paymentStatus}
                   </Badge>
                 </div>
-                {selectedBooking.referralCode && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-sm text-muted-foreground">
                       {t("Referral")}
+                      <ReferralChangeControl
+                        eventId={eventId}
+                        kind="roundTable"
+                        bookingId={selectedBooking._id}
+                        currentAgentId={selectedBooking.referralAgentId}
+                        onChanged={(patch) => {
+                          setSelectedBooking((b: any) => (b ? { ...b, ...patch } : b));
+                          setBookings((prev) =>
+                            prev.map((bk: any) =>
+                              bk._id === selectedBooking._id ? { ...bk, ...patch } : bk,
+                            ),
+                          );
+                        }}
+                      />
                     </span>
                     <span className="text-sm">
                       {[
@@ -705,10 +728,11 @@ const RoundTableBookings = ({
                             : ""),
                       ]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .join(" · ") || "—"}
                     </span>
                   </div>
-                )}
+                  <ReferralHistoryList history={selectedBooking.referralHistory} />
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Check-In</span>
                   <span className="text-sm">

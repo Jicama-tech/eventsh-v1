@@ -4720,6 +4720,16 @@ export class StallsService {
         ])
         .sort({ createdAt: -1 });
 
+      // This is the vendor-facing lookup: drop organizer-only timeline
+      // entries (e.g. a referral reassignment) before they leave the server.
+      // The documents are only read from here on, never saved.
+      for (const doc of allRequests) {
+        if (Array.isArray((doc as any).statusHistory)) {
+          (doc as any).statusHistory = (doc as any).statusHistory.filter(
+            (h: any) => !h?.internal,
+          );
+        }
+      }
       const existingRequest = allRequests[0] || null;
 
       if (!existingRequest) {
