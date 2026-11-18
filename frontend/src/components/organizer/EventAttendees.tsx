@@ -667,7 +667,8 @@ const EventAttendees: React.FC<EventAttendeesProps> = ({ setShowAddEvent }) => {
 
     // The one participant count, from the backend - the same number the
     // dashboard's Total Participants shows. It covers tickets and seats,
-    // exhibitors, speakers, round tables, workshops and scheduled spaces.
+    // exhibitors, speakers, sponsors, round tables, workshops and scheduled
+    // spaces.
     // The local sum below is only a fallback if that call fails.
     let participantTotal: number | null = null;
     try {

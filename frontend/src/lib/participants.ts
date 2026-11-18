@@ -1,7 +1,7 @@
 // Participants, counted one way everywhere. The backend
 // (GET /analytics/organizer/:id/participants) does the counting - tickets and
-// seats, exhibitors, speakers, round-table seats, workshops and scheduled
-// spaces - so the dashboard and the Participants tab can't disagree.
+// seats, exhibitors, speakers, sponsors, round-table seats, workshops and
+// scheduled spaces - so the dashboard and the Participants tab can't disagree.
 
 export interface EventParticipants {
   eventId: string;
@@ -12,6 +12,7 @@ export interface EventParticipants {
   roundTables: number;
   workshops: number;
   scheduledSpaces: number;
+  sponsors: number;
   /** Bookings still waiting on the organizer. */
   pending: number;
   /** Nothing on the event carries a price. */
@@ -29,7 +30,8 @@ export type ParticipantKind =
   | "speakers"
   | "roundTables"
   | "workshops"
-  | "scheduledSpaces";
+  | "scheduledSpaces"
+  | "sponsors";
 
 export const PARTICIPANT_KINDS: { key: ParticipantKind; label: string }[] = [
   { key: "visitors", label: "Visitors" },
@@ -38,6 +40,7 @@ export const PARTICIPANT_KINDS: { key: ParticipantKind; label: string }[] = [
   { key: "roundTables", label: "Round table seats" },
   { key: "workshops", label: "Workshops" },
   { key: "scheduledSpaces", label: "Scheduled spaces" },
+  { key: "sponsors", label: "Sponsors" },
 ];
 
 /** Null when the call fails, so callers can fall back to their own figures. */

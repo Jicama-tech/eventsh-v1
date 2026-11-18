@@ -25,7 +25,7 @@ export class AnalyticsController {
 
   /**
    * Participants per event and in total - tickets and seats, exhibitors,
-   * speakers, round-table seats, workshops and scheduled spaces - plus
+   * speakers, sponsors, round-table seats, workshops and scheduled spaces - plus
    * whether each event is free. One count shared by the dashboard and the
    * Participants tab so the two always match.
    */

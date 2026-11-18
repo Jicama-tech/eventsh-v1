@@ -132,6 +132,8 @@ export interface EventParticipants {
   workshops: number;
   /** People booked into scheduled-space slots. */
   scheduledSpaces: number;
+  /** Sponsors (applied, approved or confirmed). */
+  sponsors: number;
   /** Bookings still waiting on the organizer (approval or payment check). */
   pending: number;
   /** No priced item anywhere on the event - revenue is not applicable. */
@@ -1553,8 +1555,9 @@ export class AnalyticsService {
    * Participant counts for every event an organizer runs. A participant is a
    * live booking: cancelled, rejected, failed and refunded ones are left out,
    * unpaid-but-live ones are in (they hold a place). Units are people:
-   * ticket quantity (a seat is one), one per exhibitor and speaker, seats at
-   * round tables, workshop quantity, and party size in scheduled spaces.
+   * ticket quantity (a seat is one), one per exhibitor, speaker and sponsor,
+   * seats at round tables, workshop quantity, and party size in scheduled
+   * spaces.
    */
   async organizerParticipants(organizerId: string) {
     this.assertId(organizerId, "organizerId");
@@ -1576,7 +1579,7 @@ export class AnalyticsService {
     const idsBoth = [...ids, ...ids.map((i) => new Types.ObjectId(i))];
     const byEvent = { eventId: { $in: idsBoth } };
 
-    const [tickets, stalls, speakers, rounds, workshops, scheduled] =
+    const [tickets, stalls, speakers, rounds, workshops, scheduled, sponsors] =
       (await Promise.all([
         this.ticketModel.find(byEvent).select("eventId ticketId status ticketDetails").lean(),
         this.stallModel.find(byEvent).select("eventId status").lean(),
@@ -1593,6 +1596,7 @@ export class AnalyticsService {
           .find(byEvent)
           .select("eventId status partySize selectedSlots")
           .lean(),
+        this.sponsorModel.find(byEvent).select("eventId status").lean(),
       ])) as any[][];
 
     const n = (v: any) => Number(v) || 0;
@@ -1606,6 +1610,7 @@ export class AnalyticsService {
       roundTables: 0,
       workshops: 0,
       scheduledSpaces: 0,
+      sponsors: 0,
       pending: 0,
       isFree: true,
     });
@@ -1656,6 +1661,13 @@ export class AnalyticsService {
       if (String(q.status) === "Processing") r.pending += 1;
     }
 
+    for (const sp of sponsors) {
+      const r = row(sp.eventId);
+      if (!r || dead(sp.status)) continue;
+      r.sponsors += 1;
+      if (["Applied", "Payment Submitted"].includes(String(sp.status))) r.pending += 1;
+    }
+
     // Free = nothing on the event carries a price.
     const PRICE_KEYS = ["price", "tablePrice", "chairPrice", "bookingPrice", "depositPrice", "slotPrice"];
     const priced = (items: any) =>
@@ -1665,7 +1677,13 @@ export class AnalyticsService {
     for (const e of events) {
       const r = rows.get(String(e._id))!;
       r.total =
-        r.visitors + r.exhibitors + r.speakers + r.roundTables + r.workshops + r.scheduledSpaces;
+        r.visitors +
+        r.exhibitors +
+        r.speakers +
+        r.roundTables +
+        r.workshops +
+        r.scheduledSpaces +
+        r.sponsors;
       r.isFree = !(
         n(e.ticketPrice) > 0 ||
         [
@@ -1699,6 +1717,7 @@ export class AnalyticsService {
         roundTables: sumOf((r) => r.roundTables),
         workshops: sumOf((r) => r.workshops),
         scheduledSpaces: sumOf((r) => r.scheduledSpaces),
+        sponsors: sumOf((r) => r.sponsors),
         pending: sumOf((r) => r.pending),
       },
     };
