@@ -13,6 +13,7 @@ import { StallSchema } from "../stalls/entities/stall.entity";
 import { RoundTableBookingSchema } from "../round-table-bookings/entities/round-table-booking.entity";
 import { SpeakerRequestSchema } from "../speaker-requests/entities/speaker-request.entity";
 import { ScheduledSpaceRequestSchema } from "../scheduled-spaces/entities/scheduled-space-request.entity";
+import { WorkshopBookingSchema } from "../workshop-bookings/entities/workshop-booking.entity";
 import { MailModule } from "../roles/mail.module";
 import { OtpModule } from "../otp/otp.module";
 import { WhatsappModule } from "../whatsapp/whatsapp.module";
@@ -44,6 +45,7 @@ import { EventAgentsService } from "./event-agents.service";
       { name: "RoundTableBooking", schema: RoundTableBookingSchema },
       { name: "SpeakerRequest", schema: SpeakerRequestSchema },
       { name: "ScheduledSpaceRequest", schema: ScheduledSpaceRequestSchema },
+      { name: "WorkshopBooking", schema: WorkshopBookingSchema },
     ]),
     MailModule,
     OtpModule,

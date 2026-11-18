@@ -38,7 +38,8 @@ export type ReferralBookingKind =
   | "stall"
   | "speaker"
   | "roundTable"
-  | "scheduledSpace";
+  | "scheduledSpace"
+  | "workshop";
 
 /**
  * "Change" link + dialog for moving a booking's referral to another agent of

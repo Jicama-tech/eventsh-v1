@@ -102,6 +102,7 @@ export class EventAgentsService {
     @InjectModel("RoundTableBooking") private readonly roundTableModel: Model<any>,
     @InjectModel("SpeakerRequest") private readonly speakerModel: Model<any>,
     @InjectModel("ScheduledSpaceRequest") private readonly scheduledModel: Model<any>,
+    @InjectModel("WorkshopBooking") private readonly workshopModel: Model<any>,
     private readonly mailService: MailService,
     private readonly otpService: OtpService,
   ) {}
@@ -159,6 +160,8 @@ export class EventAgentsService {
         return this.roundTableModel;
       case "scheduledSpace":
         return this.scheduledModel;
+      case "workshop":
+        return this.workshopModel;
     }
   }
 
@@ -186,7 +189,7 @@ export class EventAgentsService {
     const booking: any = await model
       .findById(dto.bookingId)
       .select(
-        "eventId status referralCode referralAgentId referralAgentName referralOperatorId referralOperatorName",
+        "eventId ticketId status referralCode referralAgentId referralAgentName referralOperatorId referralOperatorName",
       )
       .lean();
     const bookingEvent = String(booking?.eventId?._id ?? booking?.eventId ?? "");
@@ -275,6 +278,36 @@ export class EventAgentsService {
         "referralCode referralAgentId referralAgentName referralOperatorId referralOperatorName statusHistory referralHistory",
       )
       .lean();
+
+    // A confirmed workshop booking is mirrored by a "WS-<bookingId>" ticket
+    // (that is what the Visitors list shows). Move both so the ticket and the
+    // booking - which the agent reports read - never disagree.
+    const mirrorOps = {
+      ...(Object.keys(set).length ? { $set: set } : {}),
+      $unset: unset,
+      $push: { referralHistory: { note, changedBy: who, changedAt: at } },
+    };
+    if (dto.kind === "ticket" && String(booking.ticketId || "").startsWith("WS-")) {
+      const wid = String(booking.ticketId).slice(3);
+      if (Types.ObjectId.isValid(wid)) {
+        const wb: any = await this.workshopModel.findById(wid).select("eventId").lean();
+        if (wb && String(wb.eventId?._id ?? wb.eventId) === String(event._id)) {
+          await this.workshopModel.updateOne({ _id: wid }, mirrorOps);
+        }
+      }
+    } else if (dto.kind === "workshop") {
+      await this.ticketModel.updateOne(
+        {
+          ticketId: `WS-${dto.bookingId}`,
+          eventId: { $in: [String(event._id), event._id] },
+        },
+        {
+          ...(Object.keys(set).length ? { $set: set } : {}),
+          $unset: unset,
+          $push: { referralHistory: { note, changedBy: who, changedAt: at } },
+        },
+      );
+    }
 
     // Keep the agents' booking counts honest. (An organizer override is not
     // held to the new agent's cap.)

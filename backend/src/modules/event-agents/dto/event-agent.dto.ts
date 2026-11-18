@@ -178,6 +178,7 @@ export const REASSIGN_KINDS = [
   "speaker",
   "roundTable",
   "scheduledSpace",
+  "workshop",
 ] as const;
 export type ReassignKind = (typeof REASSIGN_KINDS)[number];
 
