@@ -117,6 +117,27 @@ export interface AgentBooking {
   date: string | Date | null;
 }
 
+/** Who took part in one event, by the kind of booking they made. */
+export interface EventParticipants {
+  eventId: string;
+  /** Everyone counted below. */
+  total: number;
+  /** Ticket holders, seats included (workshop passes are under workshops). */
+  visitors: number;
+  exhibitors: number;
+  speakers: number;
+  /** Round-table seats booked. */
+  roundTables: number;
+  /** Workshop seats booked. */
+  workshops: number;
+  /** People booked into scheduled-space slots. */
+  scheduledSpaces: number;
+  /** Bookings still waiting on the organizer (approval or payment check). */
+  pending: number;
+  /** No priced item anywhere on the event - revenue is not applicable. */
+  isFree: boolean;
+}
+
 /**
  * Per-event profit and loss for an organizer.
  *
@@ -1525,6 +1546,161 @@ export class AnalyticsService {
         }),
         { revenue: 0, costs: 0, netProfit: 0 },
       ),
+    };
+  }
+
+  /**
+   * Participant counts for every event an organizer runs. A participant is a
+   * live booking: cancelled, rejected, failed and refunded ones are left out,
+   * unpaid-but-live ones are in (they hold a place). Units are people:
+   * ticket quantity (a seat is one), one per exhibitor and speaker, seats at
+   * round tables, workshop quantity, and party size in scheduled spaces.
+   */
+  async organizerParticipants(organizerId: string) {
+    this.assertId(organizerId, "organizerId");
+    const events = (await this.eventModel
+      .find({
+        $or: [
+          { organizer: organizerId },
+          ...(Types.ObjectId.isValid(organizerId)
+            ? [{ organizer: new Types.ObjectId(organizerId) }]
+            : []),
+        ],
+      })
+      .select(
+        "title ticketPrice visitorTypes seatRowTemplates tableTemplates venueTables addOnItems roundTableTemplates venueRoundTables workshopSessions workshopPackages scheduledSpaceTemplates venueScheduledSpaces speakerSlotTemplates sponsorTypes",
+      )
+      .lean()) as any[];
+
+    const ids = events.map((e) => String(e._id));
+    const idsBoth = [...ids, ...ids.map((i) => new Types.ObjectId(i))];
+    const byEvent = { eventId: { $in: idsBoth } };
+
+    const [tickets, stalls, speakers, rounds, workshops, scheduled] =
+      (await Promise.all([
+        this.ticketModel.find(byEvent).select("eventId ticketId status ticketDetails").lean(),
+        this.stallModel.find(byEvent).select("eventId status").lean(),
+        this.speakerModel.find(byEvent).select("eventId status").lean(),
+        this.roundTableModel
+          .find(byEvent)
+          .select("eventId numberOfSeats isWholeTable paymentStatus")
+          .lean(),
+        this.workshopBookingModel
+          .find(byEvent)
+          .select("eventId quantity paymentStatus")
+          .lean(),
+        this.scheduledSpaceRequestModel
+          .find(byEvent)
+          .select("eventId status partySize selectedSlots")
+          .lean(),
+      ])) as any[][];
+
+    const n = (v: any) => Number(v) || 0;
+    const rows = new Map<string, EventParticipants>();
+    const blank = (id: string): EventParticipants => ({
+      eventId: id,
+      total: 0,
+      visitors: 0,
+      exhibitors: 0,
+      speakers: 0,
+      roundTables: 0,
+      workshops: 0,
+      scheduledSpaces: 0,
+      pending: 0,
+      isFree: true,
+    });
+    for (const id of ids) rows.set(id, blank(id));
+    const row = (raw: any) => rows.get(String(raw));
+
+    const DEAD = ["Cancelled", "Rejected", "Declined", "Failed", "Refunded"];
+    const dead = (v: any) => DEAD.includes(String(v));
+
+    for (const t of tickets) {
+      const r = row(t.eventId);
+      // Workshop passes are issued as WS- tickets; workshops count them.
+      if (!r || String(t.ticketId || "").startsWith("WS-")) continue;
+      if (String(t.status).toLowerCase() === "cancelled") continue;
+      r.visitors += (t.ticketDetails || []).reduce(
+        (a: number, d: any) =>
+          a + (Array.isArray(d.seatIds) && d.seatIds.length ? d.seatIds.length : n(d.quantity) || 1),
+        0,
+      );
+    }
+    for (const s of stalls) {
+      const r = row(s.eventId);
+      if (!r || dead(s.status)) continue;
+      r.exhibitors += 1;
+      if (["Pending", "Processing"].includes(String(s.status))) r.pending += 1;
+    }
+    for (const s of speakers) {
+      const r = row(s.eventId);
+      if (!r || dead(s.status)) continue;
+      r.speakers += 1;
+      if (["Pending", "Processing"].includes(String(s.status))) r.pending += 1;
+    }
+    for (const b of rounds) {
+      const r = row(b.eventId);
+      if (!r || dead(b.paymentStatus)) continue;
+      r.roundTables += n(b.numberOfSeats) || 1;
+    }
+    for (const w of workshops) {
+      const r = row(w.eventId);
+      if (!r || dead(w.paymentStatus)) continue;
+      r.workshops += n(w.quantity) || 1;
+    }
+    for (const q of scheduled) {
+      const r = row(q.eventId);
+      // Registered-only requests (no slots picked) are not participants yet.
+      if (!r || !["Processing", "Completed"].includes(String(q.status))) continue;
+      r.scheduledSpaces += n(q.partySize) || 1;
+      if (String(q.status) === "Processing") r.pending += 1;
+    }
+
+    // Free = nothing on the event carries a price.
+    const PRICE_KEYS = ["price", "tablePrice", "chairPrice", "bookingPrice", "depositPrice", "slotPrice"];
+    const priced = (items: any) =>
+      this.flatten(items).some((it: any) =>
+        PRICE_KEYS.some((k) => n(it?.[k]) > 0),
+      );
+    for (const e of events) {
+      const r = rows.get(String(e._id))!;
+      r.total =
+        r.visitors + r.exhibitors + r.speakers + r.roundTables + r.workshops + r.scheduledSpaces;
+      r.isFree = !(
+        n(e.ticketPrice) > 0 ||
+        [
+          e.visitorTypes,
+          e.seatRowTemplates,
+          e.tableTemplates,
+          e.venueTables,
+          e.addOnItems,
+          e.roundTableTemplates,
+          e.venueRoundTables,
+          e.workshopSessions,
+          e.workshopPackages,
+          e.scheduledSpaceTemplates,
+          e.venueScheduledSpaces,
+          e.speakerSlotTemplates,
+          e.sponsorTypes,
+        ].some(priced)
+      );
+    }
+
+    const list = [...rows.values()];
+    const sumOf = (f: (r: EventParticipants) => number) =>
+      list.reduce((a, r) => a + f(r), 0);
+    return {
+      events: list,
+      totals: {
+        total: sumOf((r) => r.total),
+        visitors: sumOf((r) => r.visitors),
+        exhibitors: sumOf((r) => r.exhibitors),
+        speakers: sumOf((r) => r.speakers),
+        roundTables: sumOf((r) => r.roundTables),
+        workshops: sumOf((r) => r.workshops),
+        scheduledSpaces: sumOf((r) => r.scheduledSpaces),
+        pending: sumOf((r) => r.pending),
+      },
     };
   }
 }
