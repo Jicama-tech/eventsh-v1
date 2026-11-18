@@ -13,6 +13,7 @@ import { ComboxActionsService } from "./combox-actions.service";
 import { TicketsModule } from "../tickets/tickets.module";
 import { WorkshopRequestsModule } from "../workshop-requests/workshop-requests.module";
 import { ScheduledSpacesModule } from "../scheduled-spaces/scheduled-spaces.module";
+import { EventAgentsModule } from "../event-agents/event-agents.module";
 import { StallsModule } from "../stalls/stalls.module";
 import { SpeakerRequestsModule } from "../speaker-requests/speaker-requests.module";
 import { SponsorsModule } from "../sponsors/sponsors.module";
@@ -49,6 +50,8 @@ import { ComboxApiKeySchema } from "./schemas/combox-api-key.schema";
     forwardRef(() => TicketsModule),
     forwardRef(() => WorkshopRequestsModule),
     forwardRef(() => ScheduledSpacesModule),
+    // the Agents tab's own service, so ComBox lists agents the way Eventsh does
+    EventAgentsModule,
     MongooseModule.forFeature([
       { name: "Event", schema: EventSchema },
       { name: "Ticket", schema: TicketSchema },

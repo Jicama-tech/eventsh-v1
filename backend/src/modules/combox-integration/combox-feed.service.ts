@@ -3,6 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { AnalyticsService } from "../analytics/analytics.service";
 import { awaitingApproval } from "./combox-payments.service";
+import { EventAgentsService } from "../event-agents/event-agents.service";
 
 export type FeedColumn = {
   key: string;
@@ -22,10 +23,19 @@ export const FEED_SECTIONS = [
   "rsvp",
   "feedback",
   "expenses",
+  "agents",
 ] as const;
 export type FeedSection = (typeof FEED_SECTIONS)[number];
 
 const MAX_ROWS = 1000;
+
+/** Who a booking was credited to (an event agent or an operator), as the Participants tables show it. */
+function agentOf(d: any) {
+  return {
+    agentId: d?.referralAgentId ? String(d.referralAgentId) : null,
+    agent: d?.referralAgentName || d?.referralOperatorName || null,
+  };
+}
 
 /**
  * Read-only views of one organizer's events for ComBox. Every method first
@@ -50,6 +60,8 @@ export class ComboxFeedService {
     @InjectModel("Feedback") private readonly feedbackModel: Model<any>,
     @InjectModel("EventExpense") private readonly expenseModel: Model<any>,
     private readonly analytics: AnalyticsService,
+    // the event's agents exactly as Eventsh's own Agents tab lists them (codes, usage, share links)
+    private readonly eventAgents: EventAgentsService,
   ) {}
 
   // ---- who and which event -------------------------------------------------
@@ -126,6 +138,7 @@ export class ComboxFeedService {
 
     // the number of rows each table lists (ComBox's Participants total adds these up, so it matches the tables)
     const [ticketRows, workshopHosts] = await Promise.all([this.ticketModel.countDocuments(by), this.workshopRequestModel.countDocuments(by)]);
+    const agentCount = await this.eventAgents.list(eventId, { userId: organizerId, roles: [] } as any).then((l) => l.length).catch(() => 0);
     const t = tickets[0];
     const f = feedback[0];
     let pnl: any = null;
@@ -176,6 +189,7 @@ export class ComboxFeedService {
         feedback: f?.count ?? 0,
         feedbackAverage: f?.average ? Math.round(f.average * 10) / 10 : null,
         expenses,
+        agents: agentCount,
       },
       pnl,
     };
@@ -187,8 +201,63 @@ export class ComboxFeedService {
     await this.ownEvent(organizerId, eventId);
     const org = await this.organizer(organizerId);
     const by = this.byEvent(eventId);
-    const out = await this.build(section, eventId, by);
+    const out = section === "agents" ? await this.agentsTable(organizerId, eventId, by) : await this.build(section, eventId, by);
     return { currency: org.currency, section, ...out };
+  }
+
+  /** The event's agents, as Eventsh's Agents tab shows them, with how many bookings each was credited for. */
+  private async agentsTable(organizerId: string, eventId: string, by: any): Promise<{ columns: FeedColumn[]; rows: any[]; summary?: any }> {
+    const agents = await this.eventAgents.list(eventId, { userId: organizerId, roles: [] } as any);
+    const models: [string, Model<any>][] = [
+      ["tickets", this.ticketModel], ["exhibitors", this.stallModel], ["speakers", this.speakerModel],
+      ["roundtables", this.roundTableModel], ["scheduled-spaces", this.scheduledModel], ["workshops", this.workshopBookingModel],
+    ];
+    const perAgent = new Map<string, Record<string, number>>();
+    await Promise.all(
+      models.map(async ([key, model]) => {
+        const grouped: any[] = await model.aggregate([{ $match: { ...by, referralAgentId: { $exists: true, $ne: null } } }, { $group: { _id: "$referralAgentId", n: { $sum: 1 } } }]).exec();
+        for (const g of grouped) {
+          const id = String(g._id);
+          perAgent.set(id, { ...(perAgent.get(id) || {}), [key]: g.n });
+        }
+      }),
+    );
+    const rows = agents.map((a) => {
+      const by = perAgent.get(a.id) || {};
+      const bookings = Object.values(by).reduce((s, n) => s + n, 0);
+      return {
+        id: a.id,
+        name: a.name,
+        code: a.referralCode,
+        phone: a.whatsAppNumber || null,
+        email: a.email || null,
+        more: (a.extraContacts || []).map((c) => [c.name, c.phone].filter(Boolean).join(" ")).join("; ") || null,
+        bookings,
+        breakdown: Object.entries(by).map(([k, n]) => `${k} ${n}`).join(", ") || null,
+        uses: a.maxUses > 0 ? `${a.usedCount} of ${a.maxUses}` : `${a.usedCount} (no limit)`,
+        status: a.isActive ? (a.maxUses > 0 && a.usedCount >= a.maxUses ? "Limit reached" : "Active") : "Paused",
+        lastUsed: a.lastUsedAt,
+        lastShared: a.lastSharedAt,
+        shared: a.shareCount,
+        link: a.shareLink,
+      };
+    });
+    const credited = rows.reduce((s, r) => s + r.bookings, 0);
+    return {
+      columns: [
+        { key: "name", label: "Agent" },
+        { key: "code", label: "Referral code" },
+        { key: "phone", label: "WhatsApp" },
+        { key: "email", label: "Email" },
+        { key: "bookings", label: "Bookings", format: "number" },
+        { key: "uses", label: "Code uses" },
+        { key: "status", label: "Status", format: "status" },
+        { key: "lastUsed", label: "Last booking", format: "date" },
+        { key: "lastShared", label: "Link last sent", format: "date" },
+      ],
+      rows,
+      summary: { agents: rows.length, active: rows.filter((r) => r.status === "Active").length, credited },
+    };
   }
 
   private async build(section: FeedSection, eventId: string, by: any): Promise<{ columns: FeedColumn[]; rows: any[]; summary?: any }> {
@@ -197,6 +266,7 @@ export class ComboxFeedService {
         const rows: any[] = await this.ticketModel.find(by).sort({ purchaseDate: -1 }).limit(MAX_ROWS).lean();
         return {
           columns: [
+            { key: "agent", label: "Agent" },
             { key: "name", label: "Name" },
             { key: "email", label: "Email" },
             { key: "phone", label: "WhatsApp" },
@@ -210,6 +280,7 @@ export class ComboxFeedService {
           ],
           rows: rows.map((t) => ({
             id: String(t._id),
+            ...agentOf(t),
             name: t.customerName ?? null,
             email: t.customerEmail ?? null,
             phone: t.customerWhatsapp ?? null,
@@ -233,6 +304,7 @@ export class ComboxFeedService {
         const v = new Map(vendors.map((x) => [String(x._id), x]));
         return {
           columns: [
+            { key: "agent", label: "Agent" },
             { key: "brand", label: "Brand" },
             { key: "applicant", label: "Applicant" },
             { key: "email", label: "Email" },
@@ -249,6 +321,7 @@ export class ComboxFeedService {
             const x: any = v.get(String(s.shopkeeperId)) || {};
             return {
               id: String(s._id),
+              ...agentOf(s),
               brand: s.brandName || s.displayName || null,
               applicant: s.nameOfApplicant || x.name || null,
               email: x.businessEmail || x.email || null,
@@ -277,6 +350,7 @@ export class ComboxFeedService {
         const rows: any[] = await this.speakerModel.find(by).sort({ createdAt: -1 }).limit(MAX_ROWS).lean();
         return {
           columns: [
+            { key: "agent", label: "Agent" },
             { key: "name", label: "Speaker" },
             { key: "org", label: "Title / Organization" },
             { key: "email", label: "Email" },
@@ -288,6 +362,7 @@ export class ComboxFeedService {
           ],
           rows: rows.map((s) => ({
             id: String(s._id),
+            ...agentOf(s),
             name: s.name ?? null,
             org: [s.title, s.organization].filter(Boolean).join(", ") || null,
             email: s.email ?? null,
@@ -333,6 +408,7 @@ export class ComboxFeedService {
         const rows: any[] = await this.workshopBookingModel.find(by).sort({ createdAt: -1 }).limit(MAX_ROWS).lean();
         return {
           columns: [
+            { key: "agent", label: "Agent" },
             { key: "name", label: "Attendee" },
             { key: "email", label: "Email" },
             { key: "phone", label: "Phone" },
@@ -345,6 +421,7 @@ export class ComboxFeedService {
           ],
           rows: rows.map((b) => ({
             id: String(b._id),
+            ...agentOf(b),
             name: b.visitorName ?? null,
             email: b.visitorEmail ?? null,
             phone: b.visitorPhone ?? null,
@@ -391,6 +468,7 @@ export class ComboxFeedService {
         const rows: any[] = await this.roundTableModel.find(by).sort({ createdAt: -1 }).limit(MAX_ROWS).lean();
         return {
           columns: [
+            { key: "agent", label: "Agent" },
             { key: "name", label: "Booked by" },
             { key: "email", label: "Email" },
             { key: "phone", label: "Phone" },
@@ -402,6 +480,7 @@ export class ComboxFeedService {
           ],
           rows: rows.map((b) => ({
             id: String(b._id),
+            ...agentOf(b),
             name: b.visitorName ?? null,
             email: b.visitorEmail ?? null,
             phone: b.visitorPhone ?? null,
@@ -419,6 +498,7 @@ export class ComboxFeedService {
         const rows: any[] = await this.scheduledModel.find(by).sort({ createdAt: -1 }).limit(MAX_ROWS).lean();
         return {
           columns: [
+            { key: "agent", label: "Agent" },
             { key: "name", label: "Name" },
             { key: "email", label: "Email" },
             { key: "phone", label: "Phone" },
@@ -433,6 +513,7 @@ export class ComboxFeedService {
           ],
           rows: rows.map((r) => ({
             id: String(r._id),
+            ...agentOf(r),
             name: r.name ?? null,
             email: r.email ?? null,
             phone: r.phone || r.whatsappNumber || null,
@@ -494,6 +575,10 @@ export class ComboxFeedService {
           summary: { count: rows.length, average: avg === null ? null : Math.round(avg * 10) / 10 },
         };
       }
+
+      case "agents":
+        // built by agentsTable(), which needs the organizer
+        return { columns: [], rows: [] };
 
       case "expenses": {
         const rows: any[] = await this.expenseModel.find(by).sort({ spentAt: -1 }).limit(MAX_ROWS).lean();
