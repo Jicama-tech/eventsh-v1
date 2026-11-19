@@ -626,7 +626,7 @@ export class EventAgentsService {
    * when it has one, like the organizer's share links; the route resolves a
    * slug or an id.
    */
-  private async eventLink(
+  async eventLink(
     organizerId: string,
     event: { _id: any; slug?: string },
   ): Promise<string> {

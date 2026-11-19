@@ -10,6 +10,7 @@ import { ComboxKeyGuard } from "./combox-key.guard";
 import { ComboxFeedService, FEED_SECTIONS, FeedSection } from "./combox-feed.service";
 import { ComboxPaymentsService } from "./combox-payments.service";
 import { ComboxActionsService } from "./combox-actions.service";
+import { EventAgentsService } from "../event-agents/event-agents.service";
 
 // A payment proof is kept with the other stall uploads, under a name of its own
 const proofName = (_req: any, file: any, cb: any) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
@@ -27,6 +28,7 @@ export class ComboxIntegrationController {
     private readonly feed: ComboxFeedService,
     private readonly payments: ComboxPaymentsService,
     private readonly actions: ComboxActionsService,
+    private readonly eventAgents: EventAgentsService,
   ) {}
 
   /** Cheap check that the key works; returns the organizer id it is locked to. */
@@ -68,10 +70,13 @@ export class ComboxIntegrationController {
       .exec();
     const soldBy = new Map(sold.map((s: any) => [String(s._id), s]));
     const people = await this.feed.participantsByEvent(req.organizerId);
+    // the event's public page, built the way Eventsh builds the links it gives its agents
+    const links = await Promise.all(events.map((e: any) => this.eventAgents.eventLink(String(req.organizerId), e).catch(() => null)));
 
     return {
-      events: events.map((e: any) => ({
+      events: events.map((e: any, i: number) => ({
         id: String(e._id),
+        link: links[i],
         title: e.title,
         description: e.description ?? null,
         slug: e.slug ?? null,
