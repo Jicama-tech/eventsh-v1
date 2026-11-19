@@ -791,8 +791,16 @@ export class ComboxFeedService {
         groups: [
           { title: "Sponsor", fields: keep([
             { label: "Status", value: x.status, format: "status" }, { label: "Company", value: x.companyName }, { label: "Contact", value: x.contactName },
-            { label: "Email", value: x.businessEmail || x.email }, { label: "Tier", value: x.sponsorTypeName },
-            { label: "Amount", value: x.amount, format: "money" }, { label: "Payment verified", value: !!x.paymentVerified, format: "bool" },
+            { label: "Email", value: x.businessEmail || x.email }, { label: "Phone", value: x.phone ? `${x.countryCode || ""}${x.phone}` : null },
+            { label: "Website", value: x.website }, { label: "Message", value: x.message }, { label: "Tier", value: x.sponsorTypeName },
+            { label: "Applied", value: x.createdAt ?? x.submittedAt, format: "date" },
+            { label: "Amount", value: x.collectPayment === false ? "Non-cash" : x.amount, format: x.collectPayment === false ? "text" : "money" },
+            { label: "Chosen rewards", value: x.collectPayment === false ? (x.selectedOptions || []).join(", ") : null },
+          ]) },
+          { title: "Payment", fields: keep([
+            { label: "Amount due", value: x.amount, format: "money" }, { label: "Transaction ref", value: x.transactionId },
+            { label: "Method", value: x.paymentMethod ? String(x.paymentMethod).replace("_", " ") : null },
+            { label: "Payment proof", value: x.transactionScreenshot, format: "link" }, { label: "Payment verified", value: !!x.paymentVerified, format: "bool" },
           ]) },
         ].filter((g) => g.fields.length),
         timeline: sorted(),
@@ -815,11 +823,113 @@ export class ComboxFeedService {
           { title: "Booking", fields: keep([
             { label: "Status", value: x.status, format: "status" }, { label: "Payment", value: x.paymentStatus, format: "status" },
             { label: "Space", value: x.facilityTypeRequested || [...new Set((x.selectedSlots || []).map((t: any) => t.spaceName))].join(", ") },
-            { label: "Slots", value: (x.selectedSlots || []).map((t: any) => `${t.date} ${t.startTime}-${t.endTime}`).join("; ") },
             { label: "People", value: x.partySize ?? 1 }, { label: "Total", value: x.slotsTotal, format: "money" }, { label: "Paid", value: x.paidAmount, format: "money" },
-            { label: "Checked in", value: !!x.hasCheckedIn, format: "bool" },
+            { label: "Transaction ID", value: x.transactionId }, { label: "Payment method", value: x.paymentMethod }, { label: "Payment proof", value: x.transactionScreenshot, format: "link" },
+            { label: "Checked in", value: x.hasCheckedIn ? `Checked in ${x.checkInTime ? new Date(x.checkInTime).toLocaleString() : ""}`.trim() : "Not yet" },
+            { label: "Cancellation reason", value: x.cancellationReason },
           ]) },
-          { title: "Booked by", fields: keep([{ label: "Name", value: x.name }, { label: "Email", value: x.email }, { label: "Phone", value: x.phone || x.whatsappNumber }]) },
+          { title: "Selected slots", fields: (x.selectedSlots || []).map((t: any) => ({
+            label: `${t.spaceName || "Slot"}${t.slotLabel ? ` (${t.slotLabel})` : ""}`,
+            value: `${t.date} ${t.startTime}-${t.endTime}${t.persons > 0 ? ` · ${t.persons} of ${t.maxPersons} seats` : ""} · ${t.price ?? 0}`,
+          })) },
+          { title: "Registrant", fields: keep([
+            { label: "Name", value: x.name }, { label: "Email", value: x.email }, { label: "WhatsApp", value: x.whatsappNumber }, { label: "Phone", value: x.phone },
+            { label: "Space type", value: x.facilityTypeRequested }, { label: "Organization", value: x.organization }, { label: "Purpose", value: x.purpose },
+            { label: "Coming with", value: (x.companions || []).join(", ") },
+            ...(x.customAnswers || []).map((a: any) => ({ label: a.label, value: a.value })),
+            { label: "Referred by", value: [x.referralCode, x.referralOperatorName || (x.referralAgentName ? `Agent: ${x.referralAgentName}` : "")].filter(Boolean).join(" · ") },
+          ]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+        images,
+      };
+    }
+
+    if (section === "roundtables") {
+      const b: any = await this.roundTableModel.findOne({ _id: rowId, ...by }).lean();
+      if (!b) throw new NotFoundException("Not found");
+      mark("Booked", b.createdAt);
+      mark("Checked in", b.checkInTime);
+      mark("Checked out", b.checkOutTime);
+      (b.referralHistory || []).forEach((h: any) => mark("Referral changed", h.changedAt, h.changedBy, h.note));
+      const chairs: number[] = b.selectedChairIndices || [];
+      const guests = chairs.map((c) => {
+        const g = (b.seatGuests || []).find((x: any) => x.chairIndex === c);
+        return { label: `Chair ${c + 1}`, value: g?.name ? [g.name, g.whatsApp, g.email].filter(Boolean).join(" · ") : "Not assigned" } as F;
+      });
+      return {
+        currency: org.currency,
+        title: b.tableName || "Round table booking",
+        subtitle: b.visitorName || null,
+        status: b.paymentStatus,
+        groups: [
+          { title: "Visitor", fields: keep([{ label: "Name", value: b.visitorName }, { label: "Email", value: b.visitorEmail }, { label: "Phone", value: b.visitorPhone }]) },
+          { title: "Table", fields: keep([
+            { label: "Table", value: b.tableName }, { label: "Category", value: b.tableCategory },
+            { label: "Booked as", value: b.isWholeTable ? "Whole table" : "Individual chairs" }, { label: "Seats", value: b.numberOfSeats ?? chairs.length },
+            { label: "Chairs", value: chairs.map((c) => c + 1).join(", ") }, { label: "Seats to be allotted", value: b.allotmentPending ? true : null, format: "bool" },
+          ]) },
+          { title: "Guest details", fields: guests },
+          { title: "Payment & status", fields: keep([
+            { label: "Amount", value: b.amount, format: "money" }, { label: "Payment", value: b.paymentStatus, format: "status" },
+            { label: "Referred by", value: [b.referralCode, b.referralOperatorName || (b.referralAgentName ? `Agent: ${b.referralAgentName}` : "")].filter(Boolean).join(" · ") },
+            { label: "Checked in", value: b.hasCheckedIn ? (b.hasCheckedOut ? "Checked out" : "Checked in") : "Not yet" },
+          ]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+        images,
+      };
+    }
+
+    if (section === "workshops") {
+      const b: any = await this.workshopBookingModel.findOne({ _id: rowId, ...by }).lean();
+      if (!b) throw new NotFoundException("Not found");
+      mark("Booked", b.createdAt);
+      mark("Checked in", b.checkInTime);
+      (b.referralHistory || []).forEach((h: any) => mark("Referral changed", h.changedAt, h.changedBy, h.note));
+      return {
+        currency: org.currency,
+        title: b.itemName || "Workshop booking",
+        subtitle: b.visitorName || null,
+        status: b.paymentStatus,
+        groups: [
+          { title: "Attendee", fields: keep([{ label: "Name", value: b.visitorName }, { label: "Email", value: b.visitorEmail }, { label: "Phone", value: b.visitorPhone }]) },
+          { title: "Booking", fields: keep([
+            { label: "Workshop", value: b.itemName }, { label: "Type", value: b.bookingType }, { label: "Seats", value: b.quantity },
+            { label: "Amount", value: b.amount, format: "money" }, { label: "Payment", value: b.paymentStatus, format: "status" },
+            { label: "Referred by", value: [b.referralCode, b.referralOperatorName || (b.referralAgentName ? `Agent: ${b.referralAgentName}` : "")].filter(Boolean).join(" · ") },
+            { label: "Checked in", value: !!b.hasCheckedIn, format: "bool" },
+          ]) },
+        ].filter((g) => g.fields.length),
+        timeline: sorted(),
+        images,
+      };
+    }
+
+    if (section === "workshop-hosts") {
+      const w: any = await this.workshopRequestModel.findOne({ _id: rowId, ...by }).lean();
+      if (!w) throw new NotFoundException("Not found");
+      mark("Applied", w.createdAt);
+      mark("Approved", w.confirmationDate);
+      mark("Rejected", w.rejectionDate);
+      mark("Hosting fee paid", w.paymentDate);
+      history(w.statusHistory);
+      img("Host photo", w.hostImage);
+      return {
+        currency: org.currency,
+        title: w.workshopName || "Workshop",
+        subtitle: w.hostName ? `Applied by ${w.hostName}` : null,
+        status: w.status,
+        groups: [
+          { title: "Host", fields: keep([{ label: "Name", value: w.hostName }, { label: "Email", value: w.hostEmail }, { label: "Phone", value: w.hostPhone }, { label: "About the host", value: w.hostBio }]) },
+          { title: "Payout account", fields: keep([{ label: "Account name", value: w.hostAccountName }, { label: "Account details", value: w.hostAccountDetails }]) },
+          { title: "Workshop", fields: keep([
+            { label: "Status", value: w.status, format: "status" }, { label: "Description", value: w.workshopDescription },
+            { label: "Proposed price", value: w.proposedPrice, format: "money" }, { label: "Visitor price", value: w.finalPrice, format: "money" },
+            { label: "Max seats", value: w.maxSeats }, { label: "Time", value: [w.proposedStartTime, w.proposedEndTime].filter(Boolean).join(" - ") },
+            { label: "Hosting fee", value: w.isCharged ? w.hostingFee : null, format: "money" }, { label: "Fee payment", value: w.isCharged ? w.paymentStatus : null, format: "status" },
+            { label: "Organizer notes", value: w.organizerNotes },
+          ]) },
         ].filter((g) => g.fields.length),
         timeline: sorted(),
         images,
