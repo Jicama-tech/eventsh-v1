@@ -848,6 +848,21 @@ export class ComboxFeedService {
         title: x.name || "Booking",
         subtitle: x.facilityTypeRequested || null,
         status: x.status,
+        // what Eventsh's own dialog tells the organizer at each step
+        notice: (() => {
+          const free = (x.slotsTotal || 0) === 0;
+          switch (x.status) {
+            case "Pending": return { tone: "info", text: "Waiting for your approval. Approve it so the registrant can pick a space and slot, or reject it." };
+            case "Confirmed": return { tone: "info", text: "Approved - waiting for the registrant to pick a space & slot and submit payment." };
+            case "Processing": return { tone: "warn", text: free ? "Waiting for your approval. Approve the booking to issue the QR ticket." : "Payment submitted. Confirm the payment to issue the QR ticket." };
+            case "Completed": return { tone: "success", text: x.hasCheckedIn ? `Checked in at ${x.checkInTime ? new Date(x.checkInTime).toLocaleString() : ""}`.trim() : "Confirmed - not checked in yet. The QR ticket was issued." };
+            case "Rejected": return { tone: "danger", text: x.cancellationReason || "This request was rejected." };
+            case "Cancelled": return { tone: "danger", text: x.cancellationReason || "This booking was cancelled." };
+            default: return null;
+          }
+        })(),
+        // the check-in QR (a ready image), once the ticket is issued
+        qr: x.status === "Completed" && typeof x.qrCodeImage === "string" && x.qrCodeImage.startsWith("data:image/") ? x.qrCodeImage : null,
         groups: [
           { title: "Booking", fields: keep([
             { label: "Status", value: x.status, format: "status" }, { label: "Payment", value: x.paymentStatus, format: "status" },
