@@ -124,7 +124,8 @@ export class ComboxFeedService {
   async eventDetail(organizerId: string, eventId: string) {
     const event = await this.ownEvent(organizerId, eventId);
     const org = await this.organizer(organizerId);
-    const by = this.byEvent(eventId);
+    // a fresh filter for every query: Mongoose rewrites the filter it is given while casting it, so one shared object made later counts match nothing
+    const by = () => this.byEvent(eventId);
 
     const [tickets, exhibitors, speakers, sponsors, workshops, roundtables, rsvp, feedback, expenses, scheduledSpaces] =
       await Promise.all([
@@ -135,19 +136,19 @@ export class ComboxFeedService {
             { $group: { _id: null, orders: { $addToSet: "$_id" }, quantity: { $sum: "$ticketDetails.quantity" }, checkedIn: { $sum: { $cond: [{ $or: ["$isUsed", "$attendance"] }, "$ticketDetails.quantity", 0] } } } },
           ])
           .exec(),
-        this.stallModel.countDocuments(by),
-        this.speakerModel.countDocuments(by),
-        this.sponsorModel.countDocuments(by),
-        this.workshopBookingModel.countDocuments(by),
-        this.roundTableModel.countDocuments(by),
-        this.rsvpModel.countDocuments(by),
+        this.stallModel.countDocuments(by()),
+        this.speakerModel.countDocuments(by()),
+        this.sponsorModel.countDocuments(by()),
+        this.workshopBookingModel.countDocuments(by()),
+        this.roundTableModel.countDocuments(by()),
+        this.rsvpModel.countDocuments(by()),
         this.feedbackModel.aggregate([{ $match: { eventId: new Types.ObjectId(eventId) } }, { $group: { _id: null, count: { $sum: 1 }, average: { $avg: "$rating" } } }]).exec(),
-        this.expenseModel.countDocuments(by),
-        this.scheduledModel.countDocuments({ eventId: new Types.ObjectId(eventId) }),   // a filter of its own: the shared one is rewritten as the models above cast it
+        this.expenseModel.countDocuments(by()),
+        this.scheduledModel.countDocuments({ eventId: new Types.ObjectId(eventId) }),
       ]);
 
     // the number of rows each table lists (ComBox's Participants total adds these up, so it matches the tables)
-    const [ticketRows, workshopHosts] = await Promise.all([this.ticketModel.countDocuments(by), this.workshopRequestModel.countDocuments(by)]);
+    const [ticketRows, workshopHosts] = await Promise.all([this.ticketModel.countDocuments(by()), this.workshopRequestModel.countDocuments(by())]);
     const agentCount = await this.eventAgents.list(eventId, { userId: organizerId, roles: [] } as any).then((l) => l.length).catch(() => 0);
     const t = tickets[0];
     const f = feedback[0];
