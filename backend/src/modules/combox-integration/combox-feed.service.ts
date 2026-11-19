@@ -111,6 +111,16 @@ export class ComboxFeedService {
     return { currency: org.currency, ...pnl };
   }
 
+  /** Eventsh's own participant count for each event (live bookings, counted as people), so ComBox shows the same numbers as the dashboard. */
+  async participantsByEvent(organizerId: string): Promise<Map<string, any>> {
+    try {
+      const all: any = await this.analytics.organizerParticipants(organizerId);
+      return new Map((all?.events || []).map((e: any) => [String(e.eventId), e]));
+    } catch {
+      return new Map(); // optional: ComBox falls back to counting the table rows
+    }
+  }
+
   async eventDetail(organizerId: string, eventId: string) {
     const event = await this.ownEvent(organizerId, eventId);
     const org = await this.organizer(organizerId);
