@@ -67,6 +67,7 @@ export class ComboxIntegrationController {
       ])
       .exec();
     const soldBy = new Map(sold.map((s: any) => [String(s._id), s]));
+    const people = await this.feed.participantsByEvent(req.organizerId);
 
     return {
       events: events.map((e: any) => ({
@@ -89,6 +90,7 @@ export class ComboxIntegrationController {
         published: e.published !== false,
         ticketsSold: soldBy.get(String(e._id))?.tickets ?? 0,
         revenue: soldBy.get(String(e._id))?.revenue ?? 0,
+        participants: people.get(String(e._id)) ?? null,
       })),
     };
   }
