@@ -642,7 +642,7 @@ export class ComboxFeedService {
 
   /** Everything Eventsh holds about one exhibitor, speaker or visitor, as groups of fields and a timeline. */
   async rowDetail(organizerId: string, eventId: string, section: string, rowId: string) {
-    await this.ownEvent(organizerId, eventId);
+    const ev: any = await this.ownEvent(organizerId, eventId);
     if (!Types.ObjectId.isValid(rowId)) throw new NotFoundException("Not found");
     const org = await this.organizer(organizerId);
     const by = this.byEvent(eventId);
@@ -694,15 +694,44 @@ export class ComboxFeedService {
             { label: "Deposit returned", value: s.depositReturned ? true : null, format: "bool" },
             { label: "Checked in", value: !!s.hasCheckedIn, format: "bool" }, { label: "Checked out", value: !!s.hasCheckedOut, format: "bool" },
             { label: "Cancellation reason", value: s.cancellationReason }, { label: "Referred by", value: s.referralOperatorName || s.referralAgentName },
+            { label: "Hold timer: pay by", value: s.confirmationDeadline, format: "date" },
           ]) },
           { title: "Exhibitor", fields: keep([
-            { label: "Brand", value: s.brandName }, { label: "Display name", value: s.displayName }, { label: "Applicant", value: s.nameOfApplicant || v?.name },
-            { label: "Email", value: v?.businessEmail || v?.email }, { label: "Phone", value: v?.whatsAppNumber || v?.whatsappNumber || v?.phoneNumber || v?.phone },
-            { label: "Business", value: v?.businessName }, { label: "Business type", value: v?.businessType }, { label: "Category", value: v?.businessCategory },
-            { label: "Address", value: [v?.address, v?.city, v?.state, v?.pincode, v?.country].filter(Boolean).join(", ") },
-            { label: "Registration number", value: s.registrationNumber }, { label: "Residency", value: s.residency }, { label: "Nationality", value: s.businessOwnerNationality },
-            { label: "Product", value: s.productDescription }, { label: "Facebook", value: s.faceBookLink || v?.faceBookLink }, { label: "Instagram", value: s.instagramLink || v?.instagramLink },
-            { label: "Notes", value: s.notes },
+            { label: "Owner name", value: v?.name }, { label: "Registered business name", value: v?.businessName || v?.shopName },
+            { label: "Brand", value: s.brandName }, { label: "Display name", value: s.displayName }, { label: "Applicant name", value: s.nameOfApplicant },
+            { label: "Primary email", value: v?.email }, { label: "Business email", value: v?.businessEmail },
+            { label: "WhatsApp", value: v?.whatsAppNumber || v?.whatsappNumber || [v?.countryCode, v?.phoneNumber || v?.phone].filter(Boolean).join("") },
+            { label: "Country / nationality", value: v?.country || s.businessOwnerNationality }, { label: "Owner nationality", value: s.businessOwnerNationality }, { label: "Residency", value: s.residency },
+            { label: "Instagram", value: s.instagramLink || v?.instagramLink }, { label: "Facebook", value: s.faceBookLink || v?.faceBookLink },
+            { label: "GST number", value: v?.GSTNumber }, { label: "UEN number", value: v?.UENNumber }, { label: "Registration number", value: s.registrationNumber },
+            { label: "Business type", value: v?.businessType }, { label: "Category", value: v?.businessCategory },
+            { label: "Operators", value: s.noOfOperators }, { label: "Coupon assigned", value: s.couponCodeAssigned },
+            { label: "Referral", value: [s.referralCode, s.referralOperatorName || (s.referralAgentName ? `Agent: ${s.referralAgentName}` : "")].filter(Boolean).join(" · ") },
+            { label: "Preferred space types", value: (Array.isArray(s.preferredTemplateNames) && s.preferredTemplateNames.length ? s.preferredTemplateNames : s.preferredTemplateName ? [s.preferredTemplateName] : []).map((n: string, k: number) => { const q = Number((s.preferredTemplateQuantities || [])[k]) || 1; return q > 1 ? `${n} × ${q}` : n; }).join(", ") },
+            { label: "Business address", value: v?.address || [v?.city, v?.state, v?.pincode, v?.country].filter(Boolean).join(", ") },
+            { label: "Refund payment details", value: s.refundPaymentDescription }, { label: "Product description", value: s.productDescription }, { label: "Notes", value: s.notes },
+          ]) },
+          ...(v?.isGSTVerified && v?.gstDetails ? [{ title: "GST verification (verified)", fields: keep([
+            { label: "GSTIN", value: v.gstDetails.gstin }, { label: "Legal name", value: v.gstDetails.legalName }, { label: "Trade name", value: v.gstDetails.tradeName },
+            { label: "Status", value: v.gstDetails.status }, { label: "Registered", value: v.gstDetails.registrationDate }, { label: "Constitution", value: v.gstDetails.constitution },
+            { label: "State", value: v.gstDetails.state }, { label: "Registered address", value: v.gstDetails.address },
+          ]) }] : []),
+          ...(v?.isUENVerified && v?.uenDetails ? [{ title: "UEN verification (verified via ACRA)", fields: keep([
+            { label: "UEN", value: v.uenDetails.uen }, { label: "Entity name", value: v.uenDetails.entityName }, { label: "Status", value: v.uenDetails.status },
+            { label: "Entity type", value: v.uenDetails.entityType }, { label: "Issued", value: v.uenDetails.issueDate }, { label: "Agency", value: v.uenDetails.agency },
+            { label: "Registered address", value: v.uenDetails.address },
+          ]) }] : []),
+          ...(s.pendingAmendment?.status === "paid_pending_confirm" ? [{ title: "Vendor edited this request (approval needed)", fields: keep([
+            { label: "Operators", value: `${s.noOfOperators || "-"} → ${s.pendingAmendment.noOfOperators}` },
+            { label: "Updated add-ons", value: (s.pendingAmendment.selectedAddOns || []).map((a: any) => `${a.name} × ${a.quantity} (${(a.price || 0) * (a.quantity || 0)})`).join(", ") },
+            { label: "Difference paid by vendor", value: s.pendingAmendment.amountDue || 0, format: "money" as const }, { label: "Transaction ID", value: s.pendingAmendment.transactionId },
+            { label: "Payment proof", value: s.pendingAmendment.transactionScreenshot, format: "link" as const },
+          ]) }] : []),
+          ...(s.pendingCancellation?.status === "requested" ? [{ title: "Vendor requested cancellation (decision needed)", fields: keep([{ label: "Reason", value: s.pendingCancellation.reason || "-" }]) }] : []),
+          { title: "Event", fields: keep([
+            { label: "Event", value: ev?.title }, { label: "Category", value: ev?.category },
+            { label: "Dates", value: [ev?.startDate, ev?.endDate].filter(Boolean).map((d: any) => new Date(d).toLocaleDateString()).join(" - ") },
+            { label: "Starts at", value: ev?.time }, { label: "Venue", value: [ev?.location, ev?.address].filter(Boolean).join(", ") },
           ]) },
         ].filter((g) => g.fields.length),
         timeline: sorted(),
