@@ -29,3 +29,24 @@ export function eventHasEnded(event: EventLike): boolean {
 /** Standard user-facing message when a booking is refused for a past event. */
 export const EVENT_ENDED_MESSAGE =
   "This event has ended — ticket sales and bookings are closed.";
+
+/**
+ * The organizer can switch bookings off for an event ("Bookings open" in the
+ * event form), with a message the public page shows to anyone who tries to
+ * book. Unset means open, so every existing event keeps taking bookings.
+ */
+export function bookingsPaused(
+  event: { bookingsOpen?: boolean | null } | null | undefined,
+): boolean {
+  return !!event && event.bookingsOpen === false;
+}
+
+/** What to tell a visitor who tries to book while bookings are switched off. */
+export const BOOKINGS_PAUSED_DEFAULT_MESSAGE =
+  "Bookings are currently closed for this event.";
+
+export function bookingsPausedMessage(
+  event: { bookingClosedMessage?: string | null } | null | undefined,
+): string {
+  return String(event?.bookingClosedMessage || "").trim() || BOOKINGS_PAUSED_DEFAULT_MESSAGE;
+}

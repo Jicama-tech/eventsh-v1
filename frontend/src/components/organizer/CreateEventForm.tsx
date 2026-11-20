@@ -10063,6 +10063,10 @@ export function CreateEventForm({
     status: initialData?.status ?? "published",
     featured: initialData?.featured ?? false,
     workshopHostingOpen: initialData?.workshopHostingOpen ?? false,
+    // Master switch for new bookings (any kind). Off shows the message below
+    // to anyone who tries to book.
+    bookingsOpen: initialData?.bookingsOpen ?? true,
+    bookingClosedMessage: initialData?.bookingClosedMessage ?? "",
     setupTime: initialData?.setupTime ?? "",
     breakdownTime: initialData?.breakdownTime ?? "",
     termsForStalls:
@@ -13010,6 +13014,61 @@ export function CreateEventForm({
                       />
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Bookings — master on/off switch + the message visitors see */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("Bookings")}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-start gap-3 border rounded-lg p-3 cursor-pointer hover:bg-muted/30">
+                    <Switch
+                      checked={formData.bookingsOpen !== false}
+                      onCheckedChange={(checked) =>
+                        setFormData((old) => ({
+                          ...old,
+                          bookingsOpen: checked,
+                        }))
+                      }
+                    />
+                    <div>
+                      <p className="font-medium text-sm">{t("Bookings open")}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t(
+                          "Turn this off to stop all new bookings - visitor tickets, stalls, speakers, round tables, workshops and scheduled spaces. Anyone who tries to book sees your message instead. People who already booked are not affected.",
+                        )}
+                      </p>
+                    </div>
+                  </label>
+                  {formData.bookingsOpen === false && (
+                    <div className="space-y-2">
+                      <Label htmlFor="bookingClosedMessage">
+                        {t("Message shown to visitors")}
+                      </Label>
+                      <Textarea
+                        id="bookingClosedMessage"
+                        rows={3}
+                        maxLength={1000}
+                        value={formData.bookingClosedMessage || ""}
+                        onChange={(e) =>
+                          setFormData((old) => ({
+                            ...old,
+                            bookingClosedMessage: e.target.value,
+                          }))
+                        }
+                        placeholder={t(
+                          "e.g. Bookings are closed for now. They reopen on 1 December - check back then!",
+                        )}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {t(
+                          "Shown at the top of the event page and whenever someone tries to book. Leave it empty to show: \"Bookings are currently closed for this event.\"",
+                        )}
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

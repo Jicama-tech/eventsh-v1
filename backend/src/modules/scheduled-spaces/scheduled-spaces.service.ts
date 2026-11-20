@@ -9,6 +9,8 @@ import {
 } from "@nestjs/common";
 import { assertReferralIfRequired } from "../../common/referral-required.util";
 import {
+  bookingsPaused,
+  bookingsPausedMessage,
   eventHasEnded,
   EVENT_ENDED_MESSAGE,
 } from "../../common/event-timing.util";
@@ -98,6 +100,10 @@ export class ScheduledSpacesService {
     }
     const event = await this.eventModel.findById(dto.eventId);
     if (!event) throw new NotFoundException("Event not found");
+    // The organizer switched bookings off for this event.
+    if (bookingsPaused(event)) {
+      throw new BadRequestException(bookingsPausedMessage(event));
+    }
     // Past events accept no new bookings — same shared guard every other
     // public booking flow uses (tickets, stalls, round tables, workshops).
     if (eventHasEnded(event)) {

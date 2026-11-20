@@ -127,6 +127,7 @@ import { StallStepper, ScheduledSpaceStepper } from "./StallStepper";
 import StatusTimeline from "@/components/StatusTimeline";
 import { FacilityCourtMarkings } from "@/lib/facilityCourtLines";
 import DemoPrompt from "./DemoPrompt";
+import BookingsClosedDialog from "./BookingsClosedDialog";
 import { startDemoDashboard } from "@/lib/demoDashboard";
 import {
   getCustomFields,
@@ -437,6 +438,22 @@ function isEventOver(
   if (isNaN(d.getTime())) return false;
   d.setHours(23, 59, 59, 999);
   return d.getTime() < Date.now();
+}
+
+/**
+ * True while the organizer has bookings switched off ("Bookings open" in the
+ * event form). Unset counts as open, so older events are unaffected. The
+ * backend refuses new bookings too; this just shows the organizer's message.
+ */
+function bookingsPaused(ev?: unknown): boolean {
+  return !!ev && (ev as { bookingsOpen?: boolean }).bookingsOpen === false;
+}
+
+function pausedMessage(ev?: unknown): string {
+  return (
+    String((ev as { bookingClosedMessage?: string } | null)?.bookingClosedMessage || "").trim() ||
+    "Bookings are currently closed for this event."
+  );
 }
 
 /**
@@ -931,6 +948,16 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // (buy ticket, book stall, become member) instead invites the visitor to
   // register / contact us.
   const [showDemoPrompt, setShowDemoPrompt] = useState(false);
+  // Bookings switched off by the organizer: any attempt to book opens a
+  // dialog with their message instead of starting the flow.
+  const [showBookingsClosed, setShowBookingsClosed] = useState(false);
+  const blockIfPaused = (): boolean => {
+    if (bookingsPaused(eventData)) {
+      setShowBookingsClosed(true);
+      return true;
+    }
+    return false;
+  };
   // Membership status for the logged-in exhibitor, scoped to this
   // event's organizer. Populated after OTP verify when shopkeeper email
   // is known. When set + the space template has a memberPrice, the
@@ -2085,6 +2112,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   // Handle Rent a Stall Click - Show WhatsApp Dialog
   const handleRentStallClick = () => {
+    if (blockIfPaused()) return;
     if ((eventData as any)?.isDemo) {
       setShowDemoPrompt(true);
       return;
@@ -2154,6 +2182,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // up their existing request (by their verified email) and routes them
   // straight to their status/ticket once signed in.
   const handleScheduledSpaceClick = () => {
+    if (blockIfPaused()) return;
     if ((eventData as any)?.isDemo) {
       setShowDemoPrompt(true);
       return;
@@ -2186,6 +2215,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // sign-in → registration route, which ends in the same picker, with the
   // facility type pre-filled and the picker narrowed to the tapped facility.
   const handleScheduledSpaceMapClick = (space: any) => {
+    if (blockIfPaused()) return;
     setFocusedScheduledSpaceId(space.positionId);
     if (
       !(eventData as any)?.isDemo &&
@@ -2492,6 +2522,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   const handleScheduledSpaceFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (blockIfPaused()) return;
     const missing: string[] = [];
     if (!scheduledSpaceForm.name.trim()) missing.push("Full Name");
     if (!scheduledSpaceForm.email.trim()) missing.push("Email");
@@ -2667,6 +2698,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   };
 
   const handleScheduledSpaceSlotsSubmit = async () => {
+    if (blockIfPaused()) return;
     if (selectedScheduledSlots.length === 0) {
       toast({
         duration: 5000,
@@ -3354,6 +3386,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const speakerPopupRef = useRef<Window | null>(null);
 
   const handleGoogleSpeakerLogin = () => {
+    if (blockIfPaused()) return;
     const url = `${apiURL}/auth/google-member`;
     const w = 480;
     const h = 600;
@@ -3412,6 +3445,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
    * automatically, paid slots wait for payment.
    */
   const submitSpeakerApplication = async () => {
+    if (blockIfPaused()) return;
     if (isEventOver(eventData)) {
       toast({
         title: "This event has ended",
@@ -5867,6 +5901,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   const handleRentFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (blockIfPaused()) return;
     if (isEventOver(eventData)) {
       toast({
         title: "This event has ended",
@@ -6202,6 +6237,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
 
   const handleGetTickets = async (typeIndexOverride?: number) => {
     if (!eventData || !eventData.organizer) return;
+    if (blockIfPaused()) return;
     if ((eventData as any)?.isDemo) {
       setShowDemoPrompt(true);
       return;
@@ -6333,6 +6369,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // quantity is derived from the seats picked, not typed in.
   const handleGetSeatTickets = () => {
     if (!eventData || !eventData.organizer) return;
+    if (blockIfPaused()) return;
     if ((eventData as any)?.isDemo) {
       setShowDemoPrompt(true);
       return;
@@ -6774,6 +6811,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Guard shared by the chatbot booking shortcuts — a past event accepts no
   // new bookings (the backend also refuses).
   const guardEventOpen = (what: string): boolean => {
+    if (blockIfPaused()) return false;
     if (isEventOver(eventData)) {
       toast({
         title: "This event has ended",
@@ -6840,6 +6878,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
   // Same popup + postMessage / localStorage handshake as the Scheduled
   // Space and Rent-a-Stall flows.
   const handleRoundTableGoogleLogin = () => {
+    if (blockIfPaused()) return;
     const url = `${apiURL}/auth/google-member`;
     const w = 480;
     const h = 600;
@@ -7680,6 +7719,11 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         open={showDemoPrompt}
         onClose={() => setShowDemoPrompt(false)}
       />
+      <BookingsClosedDialog
+        open={showBookingsClosed}
+        onClose={() => setShowBookingsClosed(false)}
+        message={pausedMessage(eventData as any)}
+      />
       {(eventData as any)?.isDemo && (
         <div className="sticky top-0 z-[80] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-600 px-4 py-1.5 text-center text-xs font-semibold text-white">
           <button
@@ -7718,6 +7762,12 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
         <div className="w-full bg-gray-800 px-4 py-2.5 text-center text-sm font-medium text-white">
           This event has ended — ticket sales, stall bookings, speaker
           applications and round-table reservations are now closed.
+        </div>
+      )}
+      {/* Bookings switched off by the organizer — their message, up front. */}
+      {bookingsPaused(eventData) && !isEventOver(eventData) && (
+        <div className="w-full whitespace-pre-line bg-amber-500 px-4 py-2.5 text-center text-sm font-medium text-white">
+          {pausedMessage(eventData as any)}
         </div>
       )}
       {/* (Ad bar moved into the sticky top-strip wrapper just above
@@ -9535,6 +9585,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                                 type="button"
                                 disabled={soldOut || isEventOver(eventData)}
                                 onClick={() =>
+                                  blockIfPaused() ||
                                   navigate("/workshop-checkout", {
                                     state: {
                                       eventId: dbEventId,
@@ -9649,6 +9700,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                           type="button"
                           disabled={isEventOver(eventData)}
                           onClick={() => {
+                            if (blockIfPaused()) return;
                             setShowWorkshopCombos(false);
                             navigate("/workshop-checkout", {
                               state: {
@@ -13082,6 +13134,7 @@ export function EventFront({ eventId, onBack }: EventDetailPageProps) {
                             !rtVisitorInfo.phone
                           }
                           onClick={async () => {
+                            if (blockIfPaused()) return;
                             if (isEventOver(eventData)) {
                               toast({
                                 title: "This event has ended",

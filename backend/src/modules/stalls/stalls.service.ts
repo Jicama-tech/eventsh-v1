@@ -10,6 +10,8 @@ import { assertReferralIfRequired } from "../../common/referral-required.util";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
+  bookingsPaused,
+  bookingsPausedMessage,
   eventHasEnded,
   EVENT_ENDED_MESSAGE,
 } from "../../common/event-timing.util";
@@ -240,6 +242,10 @@ export class StallsService {
       const event = await this.eventModel.findById(createStallDto.eventId);
       if (!event) {
         throw new NotFoundException("Event not found");
+      }
+      // The organizer switched bookings off for this event.
+      if (bookingsPaused(event)) {
+        throw new BadRequestException(bookingsPausedMessage(event));
       }
       // Past events accept no new stall bookings.
       if (eventHasEnded(event)) {

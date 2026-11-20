@@ -498,6 +498,8 @@ export class EventsController {
         body.isDemo = body.isDemo === "true";
       if (typeof body.workshopHostingOpen === "string")
         body.workshopHostingOpen = body.workshopHostingOpen === "true";
+      if (typeof body.bookingsOpen === "string")
+        body.bookingsOpen = body.bookingsOpen === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")
@@ -1208,6 +1210,8 @@ export class EventsController {
         body.isDemo = body.isDemo === "true";
       if (typeof body.workshopHostingOpen === "string")
         body.workshopHostingOpen = body.workshopHostingOpen === "true";
+      if (typeof body.bookingsOpen === "string")
+        body.bookingsOpen = body.bookingsOpen === "true";
       if (typeof body.features === "string")
         body.features = JSON.parse(body.features);
       if (typeof body.socialMedia === "string")

@@ -798,6 +798,16 @@ export class Event {
   @Prop({ default: true })
   autoGenerateVendorCoupon?: boolean;
 
+  // The organizer's master switch for taking bookings. False = the public
+  // page refuses every new booking and shows `bookingClosedMessage` instead.
+  // Defaults to true so existing events are unaffected.
+  @Prop({ default: true })
+  bookingsOpen?: boolean;
+
+  // Shown on the event page when bookings are switched off.
+  @Prop({ default: "" })
+  bookingClosedMessage?: string;
+
   // When false, hides space prices from the eventfront venue-map tooltip AND
   // hides the space-template color legend below the map. Defaults to true
   // (existing behavior — prices always shown) so this is non-breaking.
