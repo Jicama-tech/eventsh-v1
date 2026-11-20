@@ -12,6 +12,7 @@ import {
   IsObject,
   Min,
   Matches,
+  MaxLength,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -959,6 +960,18 @@ export class CreateEventDto {
   @IsBoolean()
   @IsOptional()
   autoGenerateVendorCoupon?: boolean;
+
+  // Master switch for new bookings of any kind (tickets, stalls, speakers,
+  // round tables, workshops, scheduled spaces).
+  @IsBoolean()
+  @IsOptional()
+  bookingsOpen?: boolean;
+
+  // What the event page tells visitors while bookings are switched off.
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  bookingClosedMessage?: string;
 
   // When false, hides space prices + the space-template legend on the
   // eventfront venue map.

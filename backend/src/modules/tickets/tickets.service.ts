@@ -10,6 +10,8 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import {
+  bookingsPaused,
+  bookingsPausedMessage,
   eventHasEnded,
   EVENT_ENDED_MESSAGE,
 } from "../../common/event-timing.util";
@@ -85,8 +87,11 @@ export class TicketsService {
       if (createTicketDto.eventId) {
         const ev = await this.eventModel
           .findById(createTicketDto.eventId)
-          .select("startDate endDate organizer features")
+          .select("startDate endDate organizer features bookingsOpen bookingClosedMessage")
           .lean();
+        if (bookingsPaused(ev)) {
+          throw new BadRequestException(bookingsPausedMessage(ev));
+        }
         if (eventHasEnded(ev)) {
           throw new BadRequestException(EVENT_ENDED_MESSAGE);
         }
